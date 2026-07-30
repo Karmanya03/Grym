@@ -38,3 +38,33 @@ AGENTS.md
 # Editor core dumps / tags
 rusty-tags.*
 tags
+
+# Generated outputs / local scratch
+/findings*.json
+/report*.html
+/report*.md
+/*.tmp
+/check_goblin.rs
+/save_findings.ps1
+/stderr.tmp
+/stderr.log
+
+# Local attested scope configs (example file is kept)
+/config/scope.toml
+/config/scope.test.toml
+
+# Browser extension build artifacts / packages
+/browser-ext/node_modules/
+/browser-ext/dist/
+/browser-ext/.parcel-cache/
+/browser-ext/build/
+*.zip
+*.crx
+*.xpi
+
+# Secrets / keys
+*.pem
+*.key
+*.p12
+*.pfx
+/secrets/

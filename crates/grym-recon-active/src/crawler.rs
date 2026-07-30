@@ -6,8 +6,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use grym_core::{Confidence, Finding, AssetRef, Severity, Evidence,
-                ScopedClient, TechniqueTier};
+use grym_core::{AssetRef, Confidence, Evidence, Finding, ScopedClient, Severity, TechniqueTier};
 
 /// Result from crawling a single page.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -32,23 +31,64 @@ pub struct ContentDiscoveryResult {
 /// Common paths for content discovery.
 pub fn common_paths() -> Vec<&'static str> {
     vec![
-        "/robots.txt", "/sitemap.xml", "/.well-known/security.txt",
-        "/crossdomain.xml", "/clientaccesspolicy.xml",
-        "/.env", "/.git/config", "/.gitignore", "/.htaccess",
-        "/admin", "/admin/", "/administrator", "/backup",
-        "/config", "/config/", "/config.php", "/config.json",
-        "/db", "/debug", "/dump", "/error", "/errors",
-        "/info.php", "/install", "/logs", "/log",
-        "/phpinfo.php", "/phpmyadmin", "/pma",
-        "/server-status", "/server-info",
-        "/test", "/tests", "/tmp", "/temp",
-        "/uploads", "/upload", "/static", "/assets",
-        "/api", "/api/", "/api/v1", "/api/v2",
-        "/graphql", "/swagger", "/swagger.json",
-        "/swagger-ui", "/api-docs", "/openapi.json",
-        "/health", "/healthz", "/metrics", "/status",
-        "/actuator", "/actuator/health", "/actuator/info",
-        "/.well-known/", "/.well-known/apple-app-site-association",
+        "/robots.txt",
+        "/sitemap.xml",
+        "/.well-known/security.txt",
+        "/crossdomain.xml",
+        "/clientaccesspolicy.xml",
+        "/.env",
+        "/.git/config",
+        "/.gitignore",
+        "/.htaccess",
+        "/admin",
+        "/admin/",
+        "/administrator",
+        "/backup",
+        "/config",
+        "/config/",
+        "/config.php",
+        "/config.json",
+        "/db",
+        "/debug",
+        "/dump",
+        "/error",
+        "/errors",
+        "/info.php",
+        "/install",
+        "/logs",
+        "/log",
+        "/phpinfo.php",
+        "/phpmyadmin",
+        "/pma",
+        "/server-status",
+        "/server-info",
+        "/test",
+        "/tests",
+        "/tmp",
+        "/temp",
+        "/uploads",
+        "/upload",
+        "/static",
+        "/assets",
+        "/api",
+        "/api/",
+        "/api/v1",
+        "/api/v2",
+        "/graphql",
+        "/swagger",
+        "/swagger.json",
+        "/swagger-ui",
+        "/api-docs",
+        "/openapi.json",
+        "/health",
+        "/healthz",
+        "/metrics",
+        "/status",
+        "/actuator",
+        "/actuator/health",
+        "/actuator/info",
+        "/.well-known/",
+        "/.well-known/apple-app-site-association",
         "/.well-known/assetlinks.json",
     ]
 }
@@ -93,9 +133,11 @@ pub async fn crawl(
         if depth < max_depth {
             for link in &links {
                 if let Ok(parsed) = Url::parse(link)
-                    && parsed.host_str() == Some(&base_domain) && !visited.contains(&parsed.to_string()) {
-                        queue.push_back((parsed, depth + 1));
-                    }
+                    && parsed.host_str() == Some(&base_domain)
+                    && !visited.contains(&parsed.to_string())
+                {
+                    queue.push_back((parsed, depth + 1));
+                }
             }
         }
 
@@ -130,12 +172,13 @@ fn extract_links(body: &str, base: &Url, domain: &str) -> Vec<String> {
                 if let Some(m) = cap.get(1) {
                     let raw = m.as_str();
                     if let Ok(absolute) = base.join(raw)
-                        && absolute.host_str() == Some(domain) {
-                            let url_str = absolute.to_string();
-                            if !links.contains(&url_str) {
-                                links.push(url_str);
-                            }
+                        && absolute.host_str() == Some(domain)
+                    {
+                        let url_str = absolute.to_string();
+                        if !links.contains(&url_str) {
+                            links.push(url_str);
                         }
+                    }
                 }
             }
         }
@@ -184,22 +227,21 @@ pub async fn discover_content(
             && let Ok(response) = client
                 .get("grym-recon-active", url.clone(), TechniqueTier::SafeActive)
                 .await
-                && (response.status < 400 || response.status == 401 || response.status == 403) {
-                    results.push(ContentDiscoveryResult {
-                        url: response.url.clone(),
-                        status: response.status,
-                        content_length: response.body.len(),
-                    });
-                }
+            && (response.status < 400 || response.status == 401 || response.status == 403)
+        {
+            results.push(ContentDiscoveryResult {
+                url: response.url.clone(),
+                status: response.status,
+                content_length: response.body.len(),
+            });
+        }
     }
 
     results
 }
 
 /// Generates findings from crawled content.
-pub fn crawl_results_to_findings(
-    results: &[CrawlResult],
-) -> Vec<Finding> {
+pub fn crawl_results_to_findings(results: &[CrawlResult]) -> Vec<Finding> {
     let mut findings = Vec::new();
 
     for page in results {
@@ -230,9 +272,7 @@ pub fn crawl_results_to_findings(
 }
 
 /// Generates findings from content discovery.
-pub fn content_discovery_to_findings(
-    results: &[ContentDiscoveryResult],
-) -> Vec<Finding> {
+pub fn content_discovery_to_findings(results: &[ContentDiscoveryResult]) -> Vec<Finding> {
     let mut findings = Vec::new();
 
     for result in results {
@@ -256,9 +296,13 @@ pub fn content_discovery_to_findings(
         finding.evidence.push(Evidence::redacted(
             "content-discovery",
             format!("Status: {}, Size: {}", result.status, result.content_length),
-            format!("{} -> Status {}, Size {}", result.url, result.status, result.content_length),
+            format!(
+                "{} -> Status {}, Size {}",
+                result.url, result.status, result.content_length
+            ),
         ));
-        finding.remediation = "Ensure this path is properly authenticated or disabled if not needed publicly.".into();
+        finding.remediation =
+            "Ensure this path is properly authenticated or disabled if not needed publicly.".into();
         findings.push(finding);
     }
 

@@ -1,8 +1,8 @@
 //! JavaScript bundle analysis for endpoint discovery and secret detection.
 
+use grym_core::{AssetRef, Confidence, Evidence, Finding, Severity};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use grym_core::{Confidence, Finding, AssetRef, Severity, Evidence};
 
 /// Endpoint discovered from JS analysis.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize)]
@@ -81,7 +81,10 @@ pub fn find_secrets(js_content: &str, source_url: &str) -> Vec<JsSecret> {
         (r#"postgresql://[^\s"']+"#, "PostgreSQL URI"),
         (r#"mysql://[^\s"']+"#, "MySQL URI"),
         (r#"redis://[^\s"']+"#, "Redis URI"),
-        (r#"https://hooks\.slack\.com/[a-zA-Z0-9/]+"#, "Slack Webhook"),
+        (
+            r#"https://hooks\.slack\.com/[a-zA-Z0-9/]+"#,
+            "Slack Webhook",
+        ),
         (r#"https://[^@]+:[^@]+@[^\s"']+"#, "URL with credentials"),
     ];
 
@@ -103,10 +106,7 @@ pub fn find_secrets(js_content: &str, source_url: &str) -> Vec<JsSecret> {
 }
 
 /// Converts JS analysis results to findings.
-pub fn endpoints_to_findings(
-    endpoints: &[JsEndpoint],
-    asset: &AssetRef,
-) -> Vec<Finding> {
+pub fn endpoints_to_findings(endpoints: &[JsEndpoint], asset: &AssetRef) -> Vec<Finding> {
     if endpoints.is_empty() {
         return Vec::new();
     }
@@ -125,15 +125,15 @@ pub fn endpoints_to_findings(
             &ep.endpoint,
         ));
     }
-    finding.remediation = "Review exposed endpoints for sensitive functionality without authentication.".into();
-    finding.references.push("https://owasp.org/www-project-web-security-testing-guide/".into());
+    finding.remediation =
+        "Review exposed endpoints for sensitive functionality without authentication.".into();
+    finding
+        .references
+        .push("https://owasp.org/www-project-web-security-testing-guide/".into());
     vec![finding]
 }
 
-pub fn secrets_to_findings(
-    secrets: &[JsSecret],
-    asset: &AssetRef,
-) -> Vec<Finding> {
+pub fn secrets_to_findings(secrets: &[JsSecret], asset: &AssetRef) -> Vec<Finding> {
     if secrets.is_empty() {
         return Vec::new();
     }
@@ -155,6 +155,8 @@ pub fn secrets_to_findings(
     }
     finding.remediation = "Remove hardcoded secrets from client-side code. Use environment variables or a secrets manager.".into();
     finding.cwe_ids.push(798);
-    finding.references.push("https://cwe.mitre.org/data/definitions/798.html".into());
+    finding
+        .references
+        .push("https://cwe.mitre.org/data/definitions/798.html".into());
     vec![finding]
 }

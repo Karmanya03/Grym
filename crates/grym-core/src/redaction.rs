@@ -30,14 +30,13 @@ fn redact_line(line: &str) -> String {
     ];
     let is_sensitive = sensitive.iter().any(|key| lowercase.contains(key));
     let delimiter = line.find(':').or_else(|| line.find('='));
-    if is_sensitive
-        && let Some(position) = delimiter {
-            return format!(
-                "{}{}[REDACTED]",
-                &line[..position],
-                &line[position..=position]
-            );
-        }
+    if is_sensitive && let Some(position) = delimiter {
+        return format!(
+            "{}{}[REDACTED]",
+            &line[..position],
+            &line[position..=position]
+        );
+    }
     line.to_owned()
 }
 

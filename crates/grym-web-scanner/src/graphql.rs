@@ -1,15 +1,26 @@
+use grym_core::{
+    AssetRef, Confidence, Evidence, Finding, ScopedClient, ScopedClientError, Severity,
+    TechniqueTier,
+};
 use url::Url;
-use grym_core::{Confidence, Finding, AssetRef, Severity, Evidence,
-                ScopedClient, ScopedClientError, TechniqueTier};
 
 const GRAPHQL_PATHS: &[&str] = &[
-    "/graphql", "/gql", "/query", "/api", "/api/graphql", "/graph",
-    "/v1/graphql", "/v2/graphql", "/graphql/console", "/graphiql",
+    "/graphql",
+    "/gql",
+    "/query",
+    "/api",
+    "/api/graphql",
+    "/graph",
+    "/v1/graphql",
+    "/v2/graphql",
+    "/graphql/console",
+    "/graphiql",
 ];
 
 const PROBE_QUERY: &str = "{__typename}";
 const INTROSPECTION_QUERY: &str = "query{__schema{queryType{name}}}";
-const DEEP_NESTED_QUERY: &str = "{a{b{c{d{e{f{g{h{i{j{k{l{m{n{o{p{q{r{s{t{u{v{w{x{y{z}}}}}}}}}}}}}}}}}}}}}}}}";
+const DEEP_NESTED_QUERY: &str =
+    "{a{b{c{d{e{f{g{h{i{j{k{l{m{n{o{p{q{r{s{t{u{v{w{x{y{z}}}}}}}}}}}}}}}}}}}}}}}}";
 const EXPENSIVE_QUERY: &str = "{a b c d e f g h i j k l m n o p q r s t u v w x y z}";
 
 fn build_query_url(base: &Url, path: &str, query: &str) -> Option<Url> {
@@ -38,7 +49,12 @@ fn urlencoding(s: &str) -> String {
             b'?' => out.push_str("%3F"),
             b'`' => out.push_str("%60"),
             b'%' => out.push_str("%25"),
-            _ if byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_' || byte == b'.' || byte == b'~' => {
+            _ if byte.is_ascii_alphanumeric()
+                || byte == b'-'
+                || byte == b'_'
+                || byte == b'.'
+                || byte == b'~' =>
+            {
                 out.push(char::from(byte));
             }
             _ => {
@@ -75,12 +91,7 @@ async fn probe_endpoint(
     }
 }
 
-async fn fetch_body(
-    client: &ScopedClient,
-    base: &Url,
-    path: &str,
-    query: &str,
-) -> Option<String> {
+async fn fetch_body(client: &ScopedClient, base: &Url, path: &str, query: &str) -> Option<String> {
     let url = build_query_url(base, path, query)?;
     client
         .get("grym-web-scanner", url, TechniqueTier::SafeActive)
@@ -89,11 +100,7 @@ async fn fetch_body(
         .map(|r| r.body)
 }
 
-fn add_introspection_finding(
-    body: &str,
-    endpoint: &str,
-    findings: &mut Vec<Finding>,
-) {
+fn add_introspection_finding(body: &str, endpoint: &str, findings: &mut Vec<Finding>) {
     if body.contains("__schema") {
         let mut finding = Finding::new(
             format!("GraphQL introspection is enabled at {}", endpoint),
@@ -105,7 +112,9 @@ fn add_introspection_finding(
             Confidence::Confirmed,
             "grym-web-scanner",
         );
-        finding.categories.push("A01:2025-Broken-Access-Control".into());
+        finding
+            .categories
+            .push("A01:2025-Broken-Access-Control".into());
         finding.cwe_ids.push(200);
         finding.evidence.push(Evidence::redacted(
             "graphql-introspection",
@@ -113,16 +122,14 @@ fn add_introspection_finding(
             format!("Endpoint: {}, Response includes __schema", endpoint),
         ));
         finding.remediation = "Disable GraphQL introspection in production. Set the introspection flag to false in your GraphQL configuration.".into();
-        finding.references.push("https://graphql.org/learn/introspection/".into());
+        finding
+            .references
+            .push("https://graphql.org/learn/introspection/".into());
         findings.push(finding);
     }
 }
 
-fn add_depth_limiting_finding(
-    body: &str,
-    endpoint: &str,
-    findings: &mut Vec<Finding>,
-) {
+fn add_depth_limiting_finding(body: &str, endpoint: &str, findings: &mut Vec<Finding>) {
     if body.contains("\"data\"") {
         let mut finding = Finding::new(
             format!("GraphQL depth limiting may be missing at {}", endpoint),
@@ -134,7 +141,9 @@ fn add_depth_limiting_finding(
             Confidence::Possible,
             "grym-web-scanner",
         );
-        finding.categories.push("A01:2025-Broken-Access-Control".into());
+        finding
+            .categories
+            .push("A01:2025-Broken-Access-Control".into());
         finding.cwe_ids.push(770);
         finding.evidence.push(Evidence::redacted(
             "graphql-depth",
@@ -142,16 +151,14 @@ fn add_depth_limiting_finding(
             format!("Endpoint: {}, Deep query returned data", endpoint),
         ));
         finding.remediation = "Implement query depth limiting. Use a library like graphql-depth-limit or configure max_depth in your GraphQL server.".into();
-        finding.references.push("https://graphql.org/learn/security/#depth-limit".into());
+        finding
+            .references
+            .push("https://graphql.org/learn/security/#depth-limit".into());
         findings.push(finding);
     }
 }
 
-fn add_cost_analysis_finding(
-    body: &str,
-    endpoint: &str,
-    findings: &mut Vec<Finding>,
-) {
+fn add_cost_analysis_finding(body: &str, endpoint: &str, findings: &mut Vec<Finding>) {
     if body.contains("\"data\"") {
         let mut finding = Finding::new(
             format!("GraphQL query cost analysis may be missing at {}", endpoint),
@@ -163,7 +170,9 @@ fn add_cost_analysis_finding(
             Confidence::Possible,
             "grym-web-scanner",
         );
-        finding.categories.push("A01:2025-Broken-Access-Control".into());
+        finding
+            .categories
+            .push("A01:2025-Broken-Access-Control".into());
         finding.cwe_ids.push(770);
         finding.evidence.push(Evidence::redacted(
             "graphql-cost",
@@ -171,16 +180,14 @@ fn add_cost_analysis_finding(
             format!("Endpoint: {}, Wide query returned data", endpoint),
         ));
         finding.remediation = "Implement query cost analysis to limit expensive queries. Use libraries like graphql-query-cost or graphql-validation-complexity.".into();
-        finding.references.push("https://graphql.org/learn/security/#query-cost-analysis".into());
+        finding
+            .references
+            .push("https://graphql.org/learn/security/#query-cost-analysis".into());
         findings.push(finding);
     }
 }
 
-fn add_batching_finding(
-    body: &str,
-    endpoint: &str,
-    findings: &mut Vec<Finding>,
-) {
+fn add_batching_finding(body: &str, endpoint: &str, findings: &mut Vec<Finding>) {
     if body.contains("\"data\"") && body.matches("\"__typename\"").count() > 1 {
         let mut finding = Finding::new(
             format!("GraphQL batching may be allowed at {}", endpoint),
@@ -192,15 +199,22 @@ fn add_batching_finding(
             Confidence::Possible,
             "grym-web-scanner",
         );
-        finding.categories.push("A01:2025-Broken-Access-Control".into());
+        finding
+            .categories
+            .push("A01:2025-Broken-Access-Control".into());
         finding.cwe_ids.push(770);
         finding.evidence.push(Evidence::redacted(
             "graphql-batching",
             format!("Multiple queries in one request succeeded at {}", endpoint),
-            format!("Endpoint: {}, Batch response contains multiple results", endpoint),
+            format!(
+                "Endpoint: {}, Batch response contains multiple results",
+                endpoint
+            ),
         ));
         finding.remediation = "Disable or rate-limit GraphQL query batching to prevent batch attacks. Consider implementing query whitelisting.".into();
-        finding.references.push("https://graphql.org/learn/security/#batching".into());
+        finding
+            .references
+            .push("https://graphql.org/learn/security/#batching".into());
         findings.push(finding);
     }
 }
@@ -216,7 +230,12 @@ pub async fn check_graphql(
         if !found {
             continue;
         }
-        let endpoint_str = format!("{}://{}{}", url.scheme(), url.host_str().unwrap_or("unknown"), path);
+        let endpoint_str = format!(
+            "{}://{}{}",
+            url.scheme(),
+            url.host_str().unwrap_or("unknown"),
+            path
+        );
 
         if let Some(body) = fetch_body(client, url, path, INTROSPECTION_QUERY).await {
             add_introspection_finding(&body, &endpoint_str, &mut findings);
@@ -327,7 +346,9 @@ mod tests {
 
     #[test]
     fn test_build_query_url() {
-        let Ok(base) = Url::parse("http://example.com") else { return };
+        let Ok(base) = Url::parse("http://example.com") else {
+            return;
+        };
         let result = build_query_url(&base, "/graphql", "{__typename}");
         assert!(result.is_some());
         if let Some(url) = result {

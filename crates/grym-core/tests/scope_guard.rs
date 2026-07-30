@@ -5,7 +5,6 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use url::Url;
 use grym_core::{
     DenialReason, OperatorAttestation, ScopeConfig, ScopeError, ScopeGuard, TechniqueTier,
     audit::MemoryAuditLog,
@@ -13,6 +12,7 @@ use grym_core::{
         AuthorizationConfig, Engagement, LimitConfig, SafetyConfig, TargetScope, TechniqueConfig,
     },
 };
+use url::Url;
 
 fn scope() -> Result<ScopeConfig, chrono::ParseError> {
     Ok(ScopeConfig {

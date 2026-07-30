@@ -125,7 +125,7 @@ impl OobTracker {
 
 /// Builds a simple HTTP health/status endpoint for the OOB server.
 pub fn health_router() -> axum::Router {
-    use axum::{routing::get, routing::post, Router};
+    use axum::{Router, routing::get, routing::post};
 
     Router::new()
         .route("/healthz", get(|| async { "oob-server-ok" }))
@@ -133,9 +133,7 @@ pub fn health_router() -> axum::Router {
         .route("/interaction/{token}", post(handle_interaction))
 }
 
-async fn handle_interaction(
-    axum::extract::Path(token): axum::extract::Path<String>,
-) -> String {
+async fn handle_interaction(axum::extract::Path(token): axum::extract::Path<String>) -> String {
     format!("Interaction recorded for token: {}", token)
 }
 

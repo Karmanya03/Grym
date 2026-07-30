@@ -2,8 +2,8 @@
 
 #![deny(unsafe_code)]
 
-use serde::{Deserialize, Serialize};
 use grym_core::Deepness;
+use serde::{Deserialize, Serialize};
 
 /// Scheduler settings derived from an operator-selected depth profile.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

@@ -65,7 +65,11 @@ pub async fn fetch_and_hash_favicon(
 
     for url in favicon_urls {
         if let Ok(response) = client
-            .get("grym-recon-passive", url.clone(), grym_core::TechniqueTier::SafeActive)
+            .get(
+                "grym-recon-passive",
+                url.clone(),
+                grym_core::TechniqueTier::SafeActive,
+            )
             .await
         {
             let bytes = response.body.as_bytes();
@@ -76,5 +80,3 @@ pub async fn fetch_and_hash_favicon(
     }
     None
 }
-
-

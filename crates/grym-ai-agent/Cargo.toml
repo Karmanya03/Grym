@@ -1,0 +1,32 @@
+[package]
+name = "grym-ai-agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "AI-powered autonomous security agent with CVE hunting, session management, and multi-model reasoning."
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+chrono.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+regex.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+url.workspace = true
+
+async-trait.workspace = true
+grym-core = { path = "../grym-core" }
+grym-web-scanner = { path = "../grym-web-scanner" }
+grym-recon-passive = { path = "../grym-recon-passive" }
+grym-recon-active = { path = "../grym-recon-active" }
+grym-cve-intel = { path = "../grym-cve-intel" }
+grym-report = { path = "../grym-report" }
+grym-binary-analysis = { path = "../grym-binary-analysis" }

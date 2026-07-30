@@ -1,9 +1,11 @@
 //! Technology fingerprinting — from headers, body, cookies, and behavior.
 
+use grym_core::{
+    AssetRef, Confidence, Evidence, Finding, ScopedClient, ScopedClientError, Severity,
+    TechniqueTier,
+};
 use regex::Regex;
 use url::Url;
-use grym_core::{Confidence, Finding, AssetRef, Severity, Evidence,
-                ScopedClient, ScopedClientError, TechniqueTier};
 
 const TECH_HEADER_SIGNATURES: &[(&str, &str)] = &[
     (r"Server: Apache(?:/([\d.]+))?", "Apache HTTP Server"),
@@ -60,7 +62,10 @@ const BODY_TECH_PATTERNS: &[(&str, &str)] = &[
     (r"react\.js|react\.min\.js|React\.createElement", "React"),
     (r"vue\.js|vue\.min\.js|Vue\.component", "Vue.js"),
     (r"jquery\.js|jquery\.min\.js|jQuery\(|jQuery\.", "jQuery"),
-    (r"lodash\.js|lodash\.min\.js|underscore", "Lodash/Underscore"),
+    (
+        r"lodash\.js|lodash\.min\.js|underscore",
+        "Lodash/Underscore",
+    ),
     (r"moment\.js|moment\.min\.js", "Moment.js"),
     (r"chart\.js|Chart\.min\.js|new Chart", "Chart.js"),
     (r"d3\.js|d3\.min\.js|d3\.scale", "D3.js"),
@@ -84,33 +89,53 @@ pub async fn fingerprint_tech(
         for (header_name, header_value) in &response.headers {
             let combined = format!("{}: {}", header_name, header_value);
             if let Ok(re) = Regex::new(pattern)
-                && re.is_match(&combined) {
-                    let mut f = Finding::new(
-                        format!("Technology detected: {} via response header", tech_name),
-                        AssetRef { identifier: url.to_string(), kind: "web".into() },
-                        Severity::Info, Confidence::Confirmed, "grym-web-scanner",
-                    );
-                    f.categories.push("Fingerprinting".into());
-                    f.evidence.push(Evidence::redacted("tech-header", format!("Header matched: {}", header_name), combined));
-                    f.references.push("https://www.w3.org/Protocols/".into());
-                    findings.push(f);
-                }
+                && re.is_match(&combined)
+            {
+                let mut f = Finding::new(
+                    format!("Technology detected: {} via response header", tech_name),
+                    AssetRef {
+                        identifier: url.to_string(),
+                        kind: "web".into(),
+                    },
+                    Severity::Info,
+                    Confidence::Confirmed,
+                    "grym-web-scanner",
+                );
+                f.categories.push("Fingerprinting".into());
+                f.evidence.push(Evidence::redacted(
+                    "tech-header",
+                    format!("Header matched: {}", header_name),
+                    combined,
+                ));
+                f.references.push("https://www.w3.org/Protocols/".into());
+                findings.push(f);
+            }
         }
     }
 
     // Check body signatures
     for (pattern, tech_name) in BODY_TECH_PATTERNS {
         if let Ok(re) = Regex::new(pattern)
-            && re.is_match(&response.body) {
-                let mut f = Finding::new(
-                    format!("Technology detected: {} from response body", tech_name),
-                    AssetRef { identifier: url.to_string(), kind: "web".into() },
-                    Severity::Info, Confidence::Confirmed, "grym-web-scanner",
-                );
-                f.categories.push("Fingerprinting".into());
-                f.evidence.push(Evidence::redacted("tech-body", format!("Body pattern: {}", pattern), response.body.chars().take(200).collect::<String>()));
-                findings.push(f);
-            }
+            && re.is_match(&response.body)
+        {
+            let mut f = Finding::new(
+                format!("Technology detected: {} from response body", tech_name),
+                AssetRef {
+                    identifier: url.to_string(),
+                    kind: "web".into(),
+                },
+                Severity::Info,
+                Confidence::Confirmed,
+                "grym-web-scanner",
+            );
+            f.categories.push("Fingerprinting".into());
+            f.evidence.push(Evidence::redacted(
+                "tech-body",
+                format!("Body pattern: {}", pattern),
+                response.body.chars().take(200).collect::<String>(),
+            ));
+            findings.push(f);
+        }
     }
 
     Ok(findings)

@@ -2,10 +2,12 @@
 //! Tests query-parameter injection points with MongoDB operators and
 //! JSON body syntax, then checks for error, boolean-blind, and time-based signals.
 
+use grym_core::{
+    AssetRef, Confidence, Evidence, Finding, ScopedClient, ScopedClientError, Severity,
+    TechniqueTier,
+};
 use regex::Regex;
 use url::Url;
-use grym_core::{Confidence, Finding, AssetRef, Severity, Evidence,
-                ScopedClient, ScopedClientError, TechniqueTier};
 
 /// Error patterns that indicate a NoSQL database leaked an exception.
 const NOSQL_ERROR_PATTERNS: &[&str] = &[
@@ -113,13 +115,22 @@ fn get_all_params(url: &Url) -> Vec<(String, String)> {
 }
 
 /// Injects a payload into one parameter while preserving others.
-fn inject_payload(url: &Url, params: &[(String, String)], target_param: &str, payload: &str) -> Url {
+fn inject_payload(
+    url: &Url,
+    params: &[(String, String)],
+    target_param: &str,
+    payload: &str,
+) -> Url {
     let mut test_url = url.clone();
     {
         let mut pairs = test_url.query_pairs_mut();
         pairs.clear();
         for (k, v) in params {
-            let val = if k == target_param { payload.to_string() } else { v.clone() };
+            let val = if k == target_param {
+                payload.to_string()
+            } else {
+                v.clone()
+            };
             pairs.append_pair(k, &val);
         }
     }
@@ -130,24 +141,33 @@ fn inject_payload(url: &Url, params: &[(String, String)], target_param: &str, pa
 fn check_nosql_error(body: &str, _payload: &str, param_name: &str, url: &Url) -> Option<Finding> {
     for pattern in NOSQL_ERROR_PATTERNS {
         if let Ok(re) = Regex::new(pattern)
-            && re.is_match(body) {
-                return Some(Finding::new(
-                    format!("NoSQL Injection (error-based) in parameter '{}'", param_name),
-                    AssetRef {
-                        identifier: url.to_string(),
-                        kind: "web".into(),
-                    },
-                    Severity::Critical,
-                    Confidence::Confirmed,
-                    "grym-web-scanner",
-                ));
-            }
+            && re.is_match(body)
+        {
+            return Some(Finding::new(
+                format!(
+                    "NoSQL Injection (error-based) in parameter '{}'",
+                    param_name
+                ),
+                AssetRef {
+                    identifier: url.to_string(),
+                    kind: "web".into(),
+                },
+                Severity::Critical,
+                Confidence::Confirmed,
+                "grym-web-scanner",
+            ));
+        }
     }
     None
 }
 
 /// Checks if boolean-based NOSQL indicators appear (length or content difference).
-fn check_boolean_indicators(hit_body: &str, miss_body: &str, hit_status: u16, miss_status: u16) -> bool {
+fn check_boolean_indicators(
+    hit_body: &str,
+    miss_body: &str,
+    hit_status: u16,
+    miss_status: u16,
+) -> bool {
     hit_status != miss_status
         || hit_body.len() != miss_body.len()
         || hit_body.contains("GRYM_NOSQLI_TRUE")
@@ -174,22 +194,27 @@ pub async fn check_nosqli(
             let test_url = inject_payload(url, &base_query, param_name, payload);
 
             if let Ok(response) = client
-                .get("grym-web-scanner", test_url, TechniqueTier::StandardDetection)
+                .get(
+                    "grym-web-scanner",
+                    test_url,
+                    TechniqueTier::StandardDetection,
+                )
                 .await
-                && let Some(finding) = check_nosql_error(&response.body, payload, param_name, url) {
-                    let mut f = finding;
-                    f.categories.push("A05:2025-Injection".into());
-                    f.cwe_ids.push(943);
-                    f.evidence.push(Evidence::redacted(
-                        "nosqli-error-based",
-                        format!("NoSQL error pattern matched with payload: {}", payload),
-                        response.body.chars().take(200).collect::<String>(),
-                    ));
-                    f.remediation = "Use parameterized queries or input sanitisation for NoSQL databases. Validate and restrict operator usage.".into();
-                    f.references.push("https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection".into());
-                    param_findings.push(f);
-                    break;
-                }
+                && let Some(finding) = check_nosql_error(&response.body, payload, param_name, url)
+            {
+                let mut f = finding;
+                f.categories.push("A05:2025-Injection".into());
+                f.cwe_ids.push(943);
+                f.evidence.push(Evidence::redacted(
+                    "nosqli-error-based",
+                    format!("NoSQL error pattern matched with payload: {}", payload),
+                    response.body.chars().take(200).collect::<String>(),
+                ));
+                f.remediation = "Use parameterized queries or input sanitisation for NoSQL databases. Validate and restrict operator usage.".into();
+                f.references.push("https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection".into());
+                param_findings.push(f);
+                break;
+            }
         }
 
         // Phase 2: URL-encoded error-based detection
@@ -198,22 +223,31 @@ pub async fn check_nosqli(
                 let test_url = inject_payload(url, &base_query, param_name, payload);
 
                 if let Ok(response) = client
-                    .get("grym-web-scanner", test_url, TechniqueTier::StandardDetection)
+                    .get(
+                        "grym-web-scanner",
+                        test_url,
+                        TechniqueTier::StandardDetection,
+                    )
                     .await
-                    && let Some(finding) = check_nosql_error(&response.body, payload, param_name, url) {
-                        let mut f = finding;
-                        f.categories.push("A05:2025-Injection".into());
-                        f.cwe_ids.push(943);
-                        f.evidence.push(Evidence::redacted(
-                            "nosqli-encoded",
-                            format!("NoSQL error pattern matched with URL-encoded payload: {}", payload),
-                            response.body.chars().take(200).collect::<String>(),
-                        ));
-                        f.remediation = "Use parameterized queries or input sanitisation for NoSQL databases. Validate and restrict operator usage.".into();
-                        f.references.push("https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection".into());
-                        param_findings.push(f);
-                        break;
-                    }
+                    && let Some(finding) =
+                        check_nosql_error(&response.body, payload, param_name, url)
+                {
+                    let mut f = finding;
+                    f.categories.push("A05:2025-Injection".into());
+                    f.cwe_ids.push(943);
+                    f.evidence.push(Evidence::redacted(
+                        "nosqli-encoded",
+                        format!(
+                            "NoSQL error pattern matched with URL-encoded payload: {}",
+                            payload
+                        ),
+                        response.body.chars().take(200).collect::<String>(),
+                    ));
+                    f.remediation = "Use parameterized queries or input sanitisation for NoSQL databases. Validate and restrict operator usage.".into();
+                    f.references.push("https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection".into());
+                    param_findings.push(f);
+                    break;
+                }
             }
         }
 
@@ -223,22 +257,31 @@ pub async fn check_nosqli(
                 let test_url = inject_payload(url, &base_query, param_name, payload);
 
                 if let Ok(response) = client
-                    .get("grym-web-scanner", test_url, TechniqueTier::StandardDetection)
+                    .get(
+                        "grym-web-scanner",
+                        test_url,
+                        TechniqueTier::StandardDetection,
+                    )
                     .await
-                    && let Some(finding) = check_nosql_error(&response.body, payload, param_name, url) {
-                        let mut f = finding;
-                        f.categories.push("A05:2025-Injection".into());
-                        f.cwe_ids.push(943);
-                        f.evidence.push(Evidence::redacted(
-                            "nosqli-json-syntax",
-                            format!("NoSQL error pattern matched with JSON syntax payload: {}", payload),
-                            response.body.chars().take(200).collect::<String>(),
-                        ));
-                        f.remediation = "Use parameterized queries or input sanitisation for NoSQL databases. Validate and restrict operator usage.".into();
-                        f.references.push("https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection".into());
-                        param_findings.push(f);
-                        break;
-                    }
+                    && let Some(finding) =
+                        check_nosql_error(&response.body, payload, param_name, url)
+                {
+                    let mut f = finding;
+                    f.categories.push("A05:2025-Injection".into());
+                    f.cwe_ids.push(943);
+                    f.evidence.push(Evidence::redacted(
+                        "nosqli-json-syntax",
+                        format!(
+                            "NoSQL error pattern matched with JSON syntax payload: {}",
+                            payload
+                        ),
+                        response.body.chars().take(200).collect::<String>(),
+                    ));
+                    f.remediation = "Use parameterized queries or input sanitisation for NoSQL databases. Validate and restrict operator usage.".into();
+                    f.references.push("https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection".into());
+                    param_findings.push(f);
+                    break;
+                }
             }
         }
 
@@ -249,38 +292,50 @@ pub async fn check_nosqli(
                 let false_url = inject_payload(url, &base_query, param_name, false_payload);
 
                 let true_response = client
-                    .get("grym-web-scanner", true_url, TechniqueTier::StandardDetection)
+                    .get(
+                        "grym-web-scanner",
+                        true_url,
+                        TechniqueTier::StandardDetection,
+                    )
                     .await
                     .ok();
                 let false_response = client
-                    .get("grym-web-scanner", false_url, TechniqueTier::StandardDetection)
+                    .get(
+                        "grym-web-scanner",
+                        false_url,
+                        TechniqueTier::StandardDetection,
+                    )
                     .await
                     .ok();
 
                 if let (Some(tr), Some(fr)) = (true_response, false_response)
-                    && check_boolean_indicators(&tr.body, &fr.body, tr.status, fr.status) {
-                        let mut f = Finding::new(
-                            format!("Boolean-based NoSQL Injection detected in parameter '{}'", param_name),
-                            AssetRef {
-                                identifier: url.to_string(),
-                                kind: "web".into(),
-                            },
-                            Severity::Critical,
-                            Confidence::Likely,
-                            "grym-web-scanner",
-                        );
-                        f.categories.push("A05:2025-Injection".into());
-                        f.cwe_ids.push(943);
-                        f.evidence.push(Evidence::redacted(
-                            "nosqli-boolean",
-                            "Boolean blind: true payload returned different content vs false payload",
-                            tr.body.chars().take(200).collect::<String>(),
-                        ));
-                        f.remediation = "Use parameterized queries. Implement proper access controls and input validation.".into();
-                        f.references.push("https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection".into());
-                        param_findings.push(f);
-                        break;
-                    }
+                    && check_boolean_indicators(&tr.body, &fr.body, tr.status, fr.status)
+                {
+                    let mut f = Finding::new(
+                        format!(
+                            "Boolean-based NoSQL Injection detected in parameter '{}'",
+                            param_name
+                        ),
+                        AssetRef {
+                            identifier: url.to_string(),
+                            kind: "web".into(),
+                        },
+                        Severity::Critical,
+                        Confidence::Likely,
+                        "grym-web-scanner",
+                    );
+                    f.categories.push("A05:2025-Injection".into());
+                    f.cwe_ids.push(943);
+                    f.evidence.push(Evidence::redacted(
+                        "nosqli-boolean",
+                        "Boolean blind: true payload returned different content vs false payload",
+                        tr.body.chars().take(200).collect::<String>(),
+                    ));
+                    f.remediation = "Use parameterized queries. Implement proper access controls and input validation.".into();
+                    f.references.push("https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection".into());
+                    param_findings.push(f);
+                    break;
+                }
             }
         }
 
@@ -290,35 +345,43 @@ pub async fn check_nosqli(
                 let test_url = inject_payload(url, &base_query, param_name, payload);
                 let start = std::time::Instant::now();
                 let response = client
-                    .get("grym-web-scanner", test_url, TechniqueTier::StandardDetection)
+                    .get(
+                        "grym-web-scanner",
+                        test_url,
+                        TechniqueTier::StandardDetection,
+                    )
                     .await
                     .ok();
                 let elapsed = start.elapsed().as_millis();
 
                 if let Some(_r) = response
-                    && elapsed > 2500 {
-                        let mut f = Finding::new(
-                            format!("Time-based NoSQL Injection detected in parameter '{}'", param_name),
-                            AssetRef {
-                                identifier: url.to_string(),
-                                kind: "web".into(),
-                            },
-                            Severity::Critical,
-                            Confidence::Confirmed,
-                            "grym-web-scanner",
-                        );
-                        f.categories.push("A05:2025-Injection".into());
-                        f.cwe_ids.push(943);
-                        f.evidence.push(Evidence::redacted(
-                            "nosqli-time",
-                            format!("Time-based blind NoSQLi: payload took {}ms", elapsed),
-                            format!("Payload: {}, Response time: {}ms", payload, elapsed),
-                        ));
-                        f.remediation = "Use parameterized queries with proper timeout handling and input validation.".into();
-                        f.references.push("https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection".into());
-                        param_findings.push(f);
-                        break;
-                    }
+                    && elapsed > 2500
+                {
+                    let mut f = Finding::new(
+                        format!(
+                            "Time-based NoSQL Injection detected in parameter '{}'",
+                            param_name
+                        ),
+                        AssetRef {
+                            identifier: url.to_string(),
+                            kind: "web".into(),
+                        },
+                        Severity::Critical,
+                        Confidence::Confirmed,
+                        "grym-web-scanner",
+                    );
+                    f.categories.push("A05:2025-Injection".into());
+                    f.cwe_ids.push(943);
+                    f.evidence.push(Evidence::redacted(
+                        "nosqli-time",
+                        format!("Time-based blind NoSQLi: payload took {}ms", elapsed),
+                        format!("Payload: {}, Response time: {}ms", payload, elapsed),
+                    ));
+                    f.remediation = "Use parameterized queries with proper timeout handling and input validation.".into();
+                    f.references.push("https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection".into());
+                    param_findings.push(f);
+                    break;
+                }
             }
         }
 

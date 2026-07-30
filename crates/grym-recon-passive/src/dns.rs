@@ -25,14 +25,21 @@ pub enum DnsError {
 
 /// Resolves A/AAAA records for a hostname.
 pub async fn resolve_hostname(hostname: &str) -> Result<Vec<DnsRecord>, DnsError> {
-    let hostname = hostname.trim().trim_start_matches("*. ").trim_start_matches("*.");
+    let hostname = hostname
+        .trim()
+        .trim_start_matches("*. ")
+        .trim_start_matches("*.");
     let mut records = Vec::new();
 
     if let Ok(addresses) = tokio::net::lookup_host(format!("{}:0", hostname)).await {
         for addr in addresses {
             records.push(DnsRecord {
                 hostname: hostname.to_owned(),
-                record_type: if addr.is_ipv4() { "A".into() } else { "AAAA".into() },
+                record_type: if addr.is_ipv4() {
+                    "A".into()
+                } else {
+                    "AAAA".into()
+                },
                 value: addr.ip().to_string(),
                 source: "dns-resolution".into(),
             });
@@ -40,7 +47,10 @@ pub async fn resolve_hostname(hostname: &str) -> Result<Vec<DnsRecord>, DnsError
     }
 
     if records.is_empty() {
-        return Err(DnsError::Resolution(format!("No A/AAAA records for {}", hostname)));
+        return Err(DnsError::Resolution(format!(
+            "No A/AAAA records for {}",
+            hostname
+        )));
     }
     Ok(records)
 }

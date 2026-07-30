@@ -1,9 +1,11 @@
 //! WAF (Web Application Firewall) detection via probing.
 
+use grym_core::{
+    AssetRef, Confidence, Evidence, Finding, ScopedClient, ScopedClientError, Severity,
+    TechniqueTier,
+};
 use regex::Regex;
 use url::Url;
-use grym_core::{Confidence, Finding, AssetRef, Severity, Evidence,
-                ScopedClient, ScopedClientError, TechniqueTier};
 
 /// WAF-specific probe payloads that trigger WAF blocking patterns.
 const WAF_PROBE_PAYLOADS: &[(&str, &str)] = &[
@@ -64,18 +66,30 @@ const WAF_SIGNATURES: &[(&str, &str)] = &[
     (r"(?i)set-cookie.*cf_clearance", "Cloudflare"),
     (r"(?i)set-cookie.*akamai", "Akamai"),
     (r"(?i)set-cookie.*sucuri_ids", "Sucuri"),
-    (r"(?i)strict-transport-security", "HSTS enabled (security-focused)"),
+    (
+        r"(?i)strict-transport-security",
+        "HSTS enabled (security-focused)",
+    ),
     (r"(?i)x-content-type-options", "Security header present"),
     (r"(?i)x-frame-options", "Clickjacking protection"),
-    (r"(?i)content-security-policy", "CSP header (WAF integration possible)"),
+    (
+        r"(?i)content-security-policy",
+        "CSP header (WAF integration possible)",
+    ),
     (r"(?i)x-xss-protection", "XSS Filter enabled"),
     (r"(?i)x-amz-cf-id", "AWS CloudFront"),
     (r"(?i)x-fastly-request-id", "Fastly CDN/WAF"),
     (r"(?i)x-varnish", "Varnish/WAF"),
     (r"(?i)x-sucuri-block", "Sucuri Block"),
     (r"(?i)access-denied|blocked|forbidden", "WAF blocking page"),
-    (r"(?i)challenge|verify you are human|captcha", "Bot/challenge protection"),
-    (r"(?i)waf|web application firewall|security filter", "WAF detected in response"),
+    (
+        r"(?i)challenge|verify you are human|captcha",
+        "Bot/challenge protection",
+    ),
+    (
+        r"(?i)waf|web application firewall|security filter",
+        "WAF detected in response",
+    ),
 ];
 
 /// Response status codes that indicate WAF blocking.
@@ -101,7 +115,6 @@ const WAF_BLOCK_BODY_PATTERNS: &[&str] = &[
     r"(?i)your ip has been rate limited",
 ];
 
-
 pub async fn detect_waf(
     client: &ScopedClient,
     url: &Url,
@@ -119,34 +132,10 @@ pub async fn detect_waf(
             for (header_name, header_value) in &base_resp.headers {
                 let combined = format!("{}: {}", header_name, header_value);
                 if let Ok(re) = Regex::new(pattern)
-                    && re.is_match(&combined) {
-                        let mut f = Finding::new(
-                            format!("WAF detected via response header: {}", waf_name),
-                            AssetRef {
-                                identifier: url.to_string(),
-                                kind: "web".into(),
-                            },
-                            Severity::Info,
-                            Confidence::Confirmed,
-                            "grym-web-scanner",
-                        );
-            f.categories.push("active-recon".into());
-            f.categories.push("waf-detection".into());
-            f.evidence.push(Evidence::redacted(
-                "waf-header",
-                            format!("Header matched: {:?} with pattern {:?}", header_name, pattern),
-                            &combined,
-                        ));
-                        f.references.push("https://www.acunetix.com/websitesecurity/web-application-firewall/".into());
-                        findings.push(f);
-                    }
-            }
-
-            // Check body
-            if let Ok(re) = Regex::new(pattern)
-                && re.is_match(&base_resp.body) {
+                    && re.is_match(&combined)
+                {
                     let mut f = Finding::new(
-                        format!("WAF detected via response body: {}", waf_name),
+                        format!("WAF detected via response header: {}", waf_name),
                         AssetRef {
                             identifier: url.to_string(),
                             kind: "web".into(),
@@ -155,22 +144,55 @@ pub async fn detect_waf(
                         Confidence::Confirmed,
                         "grym-web-scanner",
                     );
-                    f.categories.push("Active Reconnaissance".into());
-                    f.categories.push("WAF Detection".into());
+                    f.categories.push("active-recon".into());
+                    f.categories.push("waf-detection".into());
                     f.evidence.push(Evidence::redacted(
-                        "waf-body",
-                        format!("Body matched pattern: {}", pattern),
-                        base_resp.body.chars().take(200).collect::<String>(),
+                        "waf-header",
+                        format!(
+                            "Header matched: {:?} with pattern {:?}",
+                            header_name, pattern
+                        ),
+                        &combined,
                     ));
+                    f.references.push(
+                        "https://www.acunetix.com/websitesecurity/web-application-firewall/".into(),
+                    );
                     findings.push(f);
                 }
+            }
+
+            // Check body
+            if let Ok(re) = Regex::new(pattern)
+                && re.is_match(&base_resp.body)
+            {
+                let mut f = Finding::new(
+                    format!("WAF detected via response body: {}", waf_name),
+                    AssetRef {
+                        identifier: url.to_string(),
+                        kind: "web".into(),
+                    },
+                    Severity::Info,
+                    Confidence::Confirmed,
+                    "grym-web-scanner",
+                );
+                f.categories.push("Active Reconnaissance".into());
+                f.categories.push("WAF Detection".into());
+                f.evidence.push(Evidence::redacted(
+                    "waf-body",
+                    format!("Body matched pattern: {}", pattern),
+                    base_resp.body.chars().take(200).collect::<String>(),
+                ));
+                findings.push(f);
+            }
         }
     }
 
     // Phase 2: Active probing with WAF-triggering payloads
     for (payload, attack_type) in WAF_PROBE_PAYLOADS {
         let mut test_url = url.clone();
-        let first_param: Option<(String, String)> = url.query_pairs().next()
+        let first_param: Option<(String, String)> = url
+            .query_pairs()
+            .next()
             .map(|(k, v)| (k.into_owned(), v.into_owned()));
         {
             let mut pairs = test_url.query_pairs_mut();
@@ -183,13 +205,20 @@ pub async fn detect_waf(
         }
 
         if let Ok(response) = client
-            .get("grym-web-scanner", test_url, TechniqueTier::StandardDetection)
+            .get(
+                "grym-web-scanner",
+                test_url,
+                TechniqueTier::StandardDetection,
+            )
             .await
         {
             // Check if WAF blocked the request
             if WAF_BLOCK_STATUSES.contains(&response.status) {
                 let mut f = Finding::new(
-                    format!("WAF blocking detected for {} payload (HTTP {})", attack_type, response.status),
+                    format!(
+                        "WAF blocking detected for {} payload (HTTP {})",
+                        attack_type, response.status
+                    ),
                     AssetRef {
                         identifier: url.to_string(),
                         kind: "web".into(),
@@ -202,7 +231,10 @@ pub async fn detect_waf(
                 f.categories.push("Active Reconnaissance".into());
                 f.evidence.push(Evidence::redacted(
                     "waf-probe",
-                    format!("Payload triggered WAF block: {} (HTTP {})", attack_type, response.status),
+                    format!(
+                        "Payload triggered WAF block: {} (HTTP {})",
+                        attack_type, response.status
+                    ),
                     response.body.chars().take(200).collect::<String>(),
                 ));
                 findings.push(f);
@@ -211,49 +243,52 @@ pub async fn detect_waf(
             // Check body for WAF block page patterns
             for pattern in WAF_BLOCK_BODY_PATTERNS {
                 if let Ok(re) = Regex::new(pattern)
-                    && re.is_match(&response.body) {
-                        let mut f = Finding::new(
-                            format!("WAF blocking page detected for {} payload", attack_type),
-                            AssetRef {
-                                identifier: url.to_string(),
-                                kind: "web".into(),
-                            },
-                            Severity::Medium,
-                            Confidence::Confirmed,
-                            "grym-web-scanner",
-                        );
-                        f.categories.push("WAF Detection".into());
-                        f.categories.push("Active Reconnaissance".into());
-                        f.evidence.push(Evidence::redacted(
-                            "waf-block-page",
-                            format!("WAF block page triggered by: {}", attack_type),
-                            response.body.chars().take(200).collect::<String>(),
-                        ));
-                        findings.push(f);
-                        break;
-                    }
+                    && re.is_match(&response.body)
+                {
+                    let mut f = Finding::new(
+                        format!("WAF blocking page detected for {} payload", attack_type),
+                        AssetRef {
+                            identifier: url.to_string(),
+                            kind: "web".into(),
+                        },
+                        Severity::Medium,
+                        Confidence::Confirmed,
+                        "grym-web-scanner",
+                    );
+                    f.categories.push("WAF Detection".into());
+                    f.categories.push("Active Reconnaissance".into());
+                    f.evidence.push(Evidence::redacted(
+                        "waf-block-page",
+                        format!("WAF block page triggered by: {}", attack_type),
+                        response.body.chars().take(200).collect::<String>(),
+                    ));
+                    findings.push(f);
+                    break;
+                }
             }
         }
     }
 
     // Phase 3: Fingerprint WAF type based on blocking behavior
     if findings.iter().any(|f| f.title.contains("blocking"))
-        && let Ok(ref base_resp) = base_response {
-            // Check for specific WAF signatures in the block page
-            if let Ok(re) = Regex::new(r"(?i)cloudflare|cf-ray|challenge-stage")
-                && re.is_match(&base_resp.body) {
-                    findings.push(Finding::new(
-                        "Cloudflare WAF identified via blocking behavior".to_string(),
-                        AssetRef {
-                            identifier: url.to_string(),
-                            kind: "web".into(),
-                        },
-                        Severity::Info,
-                        Confidence::Confirmed,
-                        "grym-web-scanner",
-                    ));
-                }
+        && let Ok(ref base_resp) = base_response
+    {
+        // Check for specific WAF signatures in the block page
+        if let Ok(re) = Regex::new(r"(?i)cloudflare|cf-ray|challenge-stage")
+            && re.is_match(&base_resp.body)
+        {
+            findings.push(Finding::new(
+                "Cloudflare WAF identified via blocking behavior".to_string(),
+                AssetRef {
+                    identifier: url.to_string(),
+                    kind: "web".into(),
+                },
+                Severity::Info,
+                Confidence::Confirmed,
+                "grym-web-scanner",
+            ));
         }
+    }
 
     Ok(findings)
 }

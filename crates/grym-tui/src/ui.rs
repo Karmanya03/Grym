@@ -1,18 +1,15 @@
+use crate::app::{GrymTuiApp, Tab};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{
-        Block, BorderType, Borders, Gauge, List, ListItem,
-        Paragraph, Tabs, Wrap,
-    },
+    text::{Line, Span, Text},
+    widgets::{Block, BorderType, Borders, Clear, Gauge, List, ListItem, Paragraph, Tabs, Wrap},
 };
-use crate::app::{GrymTuiApp, Tab};
 
-pub fn render(frame: &mut Frame, app: &GrymTuiApp) {
+pub fn render(frame: &mut Frame, app: &mut GrymTuiApp) {
     if app.show_help {
-        render_help_overlay(frame);
+        render_help_overlay(frame, app);
         return;
     }
 
@@ -24,12 +21,13 @@ pub fn render(frame: &mut Frame, app: &GrymTuiApp) {
     ]);
     let [header_area, body_area, footer_area] = vertical.areas(area);
 
+    app.tab_area = Some(header_area);
     render_header(frame, header_area, app);
     render_body(frame, body_area, app);
     render_footer(frame, footer_area, app);
 }
 
-fn render_header(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
+fn render_header(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
     let title_block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Double)
@@ -37,9 +35,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
         .title_alignment(ratatui::layout::Alignment::Center)
         .title(Span::styled(
             " GRYM — Advanced Web/App PT Automation Toolkit ",
-            Style::new()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
+            Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         ));
 
     let tabs = Tabs::new(vec![
@@ -63,21 +59,37 @@ fn render_header(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
     frame.render_widget(tabs, area);
 }
 
-fn render_footer(frame: &mut Frame, area: Rect, _app: &GrymTuiApp) {
+fn render_footer(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
     let hints = Line::from(vec![
         Span::styled(" [1-5] Tabs ", Style::new().fg(Color::Cyan)),
         Span::styled(" [↑↓] Navigate ", Style::new().fg(Color::Green)),
         Span::styled(" [Tab] Next Tab ", Style::new().fg(Color::Yellow)),
+        Span::styled(" [🖱] Mouse ", Style::new().fg(Color::Blue)),
         Span::styled(" [h] Help ", Style::new().fg(Color::Magenta)),
         Span::styled(" [q] Quit ", Style::new().fg(Color::Red)),
     ]);
     let footer = Paragraph::new(hints)
-        .block(Block::default().borders(Borders::ALL).border_style(Style::new().fg(Color::DarkGray)))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::new().fg(Color::DarkGray)),
+        )
         .style(Style::new().fg(Color::White));
     frame.render_widget(footer, area);
+
+    // Expose a clickable help button region (roughly the "[h] Help" span).
+    let help_width = 9u16;
+    let quit_width = 9u16;
+    let help_x = area.x + area.width.saturating_sub(help_width + quit_width + 2);
+    app.footer_help_area = Some(Rect {
+        x: help_x.max(area.x),
+        y: area.y,
+        width: help_width.min(area.width),
+        height: area.height,
+    });
 }
 
-fn render_body(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
+fn render_body(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
     match app.active_tab {
         Tab::Dashboard => render_dashboard(frame, area, app),
         Tab::Scanner => render_scanner(frame, area, app),
@@ -87,7 +99,7 @@ fn render_body(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
     }
 }
 
-fn render_dashboard(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
+fn render_dashboard(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
     let chunks = Layout::vertical([
         Constraint::Length(3),
         Constraint::Length(3),
@@ -99,13 +111,25 @@ fn render_dashboard(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
 
     let status = format!(
         "Active Scan: {} | Requests: {} | Blocked: {} | Elapsed: {}s",
-        if app.metrics.active_modules.iter().any(|m| m.running) { "RUNNING" } else { "IDLE" },
+        if app.metrics.active_modules.iter().any(|m| m.running) {
+            "RUNNING"
+        } else {
+            "IDLE"
+        },
         app.metrics.total_requests,
         app.metrics.blocked_requests,
         app.metrics.elapsed.as_secs(),
     );
-    let status_widget = Paragraph::new(Line::from(Span::styled(status, Style::new().fg(Color::Green))))
-        .block(Block::default().borders(Borders::ALL).title(" Status ").border_style(Style::new().fg(Color::Cyan)));
+    let status_widget = Paragraph::new(Line::from(Span::styled(
+        status,
+        Style::new().fg(Color::Green),
+    )))
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Status ")
+            .border_style(Style::new().fg(Color::Cyan)),
+    );
     frame.render_widget(status_widget, status_area);
 
     let stats = Layout::horizontal([
@@ -128,19 +152,43 @@ fn render_dashboard(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
             format!("{}\n{}", title, count),
             Style::new().fg(*color).add_modifier(Modifier::BOLD),
         )))
-        .block(Block::default().borders(Borders::ALL).border_style(Style::new().fg(*color)))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::new().fg(*color)),
+        )
         .alignment(ratatui::layout::Alignment::Center);
         frame.render_widget(widget, stats[i]);
     }
 
-    let modules: Vec<ListItem> = app.metrics.active_modules.iter().map(|m| {
-        let icon = if m.completed { "✓" } else if m.running { "▶" } else { "○" };
-        let color = if m.completed { Color::Green } else if m.running { Color::Yellow } else { Color::DarkGray };
-        ListItem::new(Line::from(Span::styled(
-            format!(" {} {} — {} findings ({}%)", icon, m.name, m.findings, m.progress),
-            Style::new().fg(color),
-        )))
-    }).collect();
+    let modules: Vec<ListItem> = app
+        .metrics
+        .active_modules
+        .iter()
+        .map(|m| {
+            let icon = if m.completed {
+                "✓"
+            } else if m.running {
+                "▶"
+            } else {
+                "○"
+            };
+            let color = if m.completed {
+                Color::Green
+            } else if m.running {
+                Color::Yellow
+            } else {
+                Color::DarkGray
+            };
+            ListItem::new(Line::from(Span::styled(
+                format!(
+                    " {} {} — {} findings ({}%)",
+                    icon, m.name, m.findings, m.progress
+                ),
+                Style::new().fg(color),
+            )))
+        })
+        .collect();
 
     let module_list = if modules.is_empty() {
         List::new(vec![ListItem::new(Line::from(Span::styled(
@@ -151,12 +199,16 @@ fn render_dashboard(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
         List::new(modules)
     };
 
-    let module_widget = module_list
-        .block(Block::default().borders(Borders::ALL).title(" Modules ").border_style(Style::new().fg(Color::Cyan)));
+    let module_widget = module_list.block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Modules ")
+            .border_style(Style::new().fg(Color::Cyan)),
+    );
     frame.render_widget(module_widget, modules_area);
 }
 
-fn render_scanner(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
+fn render_scanner(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
     let chunks = Layout::vertical([
         Constraint::Length(5),
         Constraint::Length(5),
@@ -168,51 +220,110 @@ fn render_scanner(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
 
     let progress = app.metrics.scan_progress_percent;
     let gauge = Gauge::default()
-        .block(Block::default().borders(Borders::ALL).title(" Scan Progress "))
-        .gauge_style(Style::new().fg(Color::Cyan).bg(Color::Black).add_modifier(Modifier::BOLD))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Scan Progress "),
+        )
+        .gauge_style(
+            Style::new()
+                .fg(Color::Cyan)
+                .bg(Color::Black)
+                .add_modifier(Modifier::BOLD),
+        )
         .percent(progress as u16)
-        .label(format!("{}% — {} findings", progress, app.metrics.findings_count));
+        .label(format!(
+            "{}% — {} findings",
+            progress, app.metrics.findings_count
+        ));
     frame.render_widget(gauge, progress_area);
 
     let target_info = format!(
         "Target: {} | Requests: {} | Rate: {:.1}/s | Modules: {}",
-        if app.metrics.current_target.is_empty() { "none" } else { &app.metrics.current_target },
+        if app.metrics.current_target.is_empty() {
+            "none"
+        } else {
+            &app.metrics.current_target
+        },
         app.metrics.total_requests,
-        if app.metrics.elapsed.as_secs() > 0 { app.metrics.total_requests as f64 / app.metrics.elapsed.as_secs() as f64 } else { 0.0 },
+        if app.metrics.elapsed.as_secs() > 0 {
+            app.metrics.total_requests as f64 / app.metrics.elapsed.as_secs() as f64
+        } else {
+            0.0
+        },
         app.metrics.active_modules.len(),
     );
-    let target_widget = Paragraph::new(Line::from(Span::styled(target_info, Style::new().fg(Color::White))))
-        .block(Block::default().borders(Borders::ALL).title(" Target Info ").border_style(Style::new().fg(Color::Yellow)));
+    let target_widget = Paragraph::new(Line::from(Span::styled(
+        target_info,
+        Style::new().fg(Color::White),
+    )))
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Target Info ")
+            .border_style(Style::new().fg(Color::Yellow)),
+    );
     frame.render_widget(target_widget, target_area);
 
     let module_items: Vec<ListItem> = [
-        ("DNS Enumeration", "Resolve subdomains via CT logs, brute force", false),
+        (
+            "DNS Enumeration",
+            "Resolve subdomains via CT logs, brute force",
+            false,
+        ),
         ("Port Scanner", "Async TCP scan of common ports", false),
         ("Web Crawler", "SPA-aware JS-rendered crawling", false),
-        ("Tech Fingerprint", "Header/cookie/favicon based tech detection", false),
-        ("Vulnerability Scan", "SQLi, XSS, SSTI, JWT, SSRF, CORS checks", false),
-        ("CVE Correlation", "Multi-source NVD/OSV/KEV/GHSA matching", false),
-    ].iter().map(|(name, desc, _)| {
+        (
+            "Tech Fingerprint",
+            "Header/cookie/favicon based tech detection",
+            false,
+        ),
+        (
+            "Vulnerability Scan",
+            "SQLi, XSS, SSTI, JWT, SSRF, CORS checks",
+            false,
+        ),
+        (
+            "CVE Correlation",
+            "Multi-source NVD/OSV/KEV/GHSA matching",
+            false,
+        ),
+    ]
+    .iter()
+    .map(|(name, desc, _)| {
         ListItem::new(Line::from(vec![
             Span::styled(" ○ ", Style::new().fg(Color::DarkGray)),
-            Span::styled(*name, Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                *name,
+                Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            ),
             Span::styled(" — ", Style::new().fg(Color::DarkGray)),
             Span::styled(*desc, Style::new().fg(Color::White)),
         ]))
-    }).collect();
+    })
+    .collect();
 
-    let module_list = List::new(module_items)
-        .block(Block::default().borders(Borders::ALL).title(" Available Scanner Modules ").border_style(Style::new().fg(Color::Cyan)));
+    let module_list = List::new(module_items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Available Scanner Modules ")
+            .border_style(Style::new().fg(Color::Cyan)),
+    );
     frame.render_widget(module_list, module_area);
 }
 
-fn render_findings(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
+fn render_findings(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
     if app.findings.is_empty() {
         let empty = Paragraph::new(Line::from(Span::styled(
             "No findings yet. Run a scan from the Scanner tab.",
             Style::new().fg(Color::DarkGray),
         )))
-        .block(Block::default().borders(Borders::ALL).title(" Findings Explorer ").border_style(Style::new().fg(Color::Cyan)));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Findings Explorer ")
+                .border_style(Style::new().fg(Color::Cyan)),
+        );
         frame.render_widget(empty, area);
         return;
     }
@@ -221,92 +332,147 @@ fn render_findings(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
         .areas::<2>(area);
 
     let [list_area, detail_area] = chunks;
+    app.findings_list_area = Some(list_area);
 
-    let items: Vec<ListItem> = app.findings.iter().enumerate().map(|(i, f)| {
-        let severity_color = match f.severity {
-            grym_core::Severity::Critical => Color::Red,
-            grym_core::Severity::High => Color::LightRed,
-            grym_core::Severity::Medium => Color::Yellow,
-            grym_core::Severity::Low => Color::Blue,
-            grym_core::Severity::Info => Color::White,
-        };
-        let confidence_icon = match f.confidence {
-            grym_core::Confidence::Confirmed => "✓",
-            grym_core::Confidence::Likely => "~",
-            grym_core::Confidence::Possible => "?",
-        };
-        ListItem::new(Line::from(vec![
-            Span::styled(format!("{:>3} ", i + 1), Style::new().fg(Color::DarkGray)),
-            Span::styled(format!("{} ", confidence_icon), Style::new().fg(severity_color)),
-            Span::styled(format!("{:?} ", f.severity), Style::new().fg(severity_color).add_modifier(Modifier::BOLD)),
-            Span::styled(&f.title, Style::new().fg(Color::White)),
-        ]))
-    }).collect();
+    let items: Vec<ListItem> = app
+        .findings
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let severity_color = match f.severity {
+                grym_core::Severity::Critical => Color::Red,
+                grym_core::Severity::High => Color::LightRed,
+                grym_core::Severity::Medium => Color::Yellow,
+                grym_core::Severity::Low => Color::Blue,
+                grym_core::Severity::Info => Color::White,
+            };
+            let confidence_icon = match f.confidence {
+                grym_core::Confidence::Confirmed => "✓",
+                grym_core::Confidence::Likely => "~",
+                grym_core::Confidence::Possible => "?",
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(format!("{:>3} ", i + 1), Style::new().fg(Color::DarkGray)),
+                Span::styled(
+                    format!("{} ", confidence_icon),
+                    Style::new().fg(severity_color),
+                ),
+                Span::styled(
+                    format!("{:?} ", f.severity),
+                    Style::new().fg(severity_color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(&f.title, Style::new().fg(Color::White)),
+            ]))
+        })
+        .collect();
 
-    let selected_style = Style::new().bg(Color::DarkGray).add_modifier(Modifier::BOLD);
+    let selected_style = Style::new()
+        .bg(Color::DarkGray)
+        .add_modifier(Modifier::BOLD);
     let findings_list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(" Findings List ").border_style(Style::new().fg(Color::Cyan)))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Findings List ")
+                .border_style(Style::new().fg(Color::Cyan)),
+        )
         .highlight_style(selected_style)
         .highlight_symbol("> ");
 
-    frame.render_stateful_widget(findings_list, list_area, &mut ratatui::widgets::ListState::default().with_selected(app.selected_finding));
+    frame.render_stateful_widget(
+        findings_list,
+        list_area,
+        &mut ratatui::widgets::ListState::default().with_selected(app.selected_finding),
+    );
 
     if let Some(idx) = app.selected_finding
-        && let Some(finding) = app.findings.get(idx) {
-            let detail = format!(
-                "Title: {}\nSeverity: {:?}\nConfidence: {:?}\nAsset: {}\nCategories: {}\nCWE: {:?}\nATT&CK: {:?}\nCVSS: {:?} ({:?})\n\nRemediation: {}\n\nReferences: {}",
-                finding.title,
-                finding.severity,
-                finding.confidence,
-                finding.affected_asset.identifier,
-                finding.categories.join(", "),
-                finding.cwe_ids,
-                finding.attack_techniques,
-                finding.cvss_vector,
-                finding.cvss_score,
-                finding.remediation,
-                finding.references.join("\n  "),
-            );
-            let detail_widget = Paragraph::new(detail)
-                .block(Block::default().borders(Borders::ALL).title(" Finding Details ").border_style(Style::new().fg(Color::Yellow)))
-                .wrap(Wrap { trim: false });
-            frame.render_widget(detail_widget, detail_area);
-        }
+        && let Some(finding) = app.findings.get(idx)
+    {
+        let detail = format!(
+            "Title: {}\nSeverity: {:?}\nConfidence: {:?}\nAsset: {}\nCategories: {}\nCWE: {:?}\nATT&CK: {:?}\nCVSS: {:?} ({:?})\n\nRemediation: {}\n\nReferences: {}",
+            finding.title,
+            finding.severity,
+            finding.confidence,
+            finding.affected_asset.identifier,
+            finding.categories.join(", "),
+            finding.cwe_ids,
+            finding.attack_techniques,
+            finding.cvss_vector,
+            finding.cvss_score,
+            finding.remediation,
+            finding.references.join("\n  "),
+        );
+        let detail_widget = Paragraph::new(detail)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Finding Details ")
+                    .border_style(Style::new().fg(Color::Yellow)),
+            )
+            .wrap(Wrap { trim: false });
+        frame.render_widget(detail_widget, detail_area);
+    }
 }
 
-fn render_logs(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
+fn render_logs(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
+    app.logs_area = Some(area);
     if app.logs.is_empty() {
         let empty = Paragraph::new(Line::from(Span::styled(
             "No log entries yet.",
             Style::new().fg(Color::DarkGray),
         )))
-        .block(Block::default().borders(Borders::ALL).title(" Live Log Stream ").border_style(Style::new().fg(Color::Cyan)));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Live Log Stream ")
+                .border_style(Style::new().fg(Color::Cyan)),
+        );
         frame.render_widget(empty, area);
         return;
     }
 
-    let log_items: Vec<ListItem> = app.logs.iter().rev().skip(app.log_scroll).take(50).map(|entry| {
-        let level_color = match entry.level.as_str() {
-            "ERROR" => Color::Red,
-            "WARN" => Color::Yellow,
-            "INFO" => Color::Green,
-            "DEBUG" => Color::Blue,
-            _ => Color::White,
-        };
-        ListItem::new(Line::from(vec![
-            Span::styled(format!("{} ", entry.timestamp), Style::new().fg(Color::DarkGray)),
-            Span::styled(format!("[{:<5}] ", entry.level), Style::new().fg(level_color).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{:<20} ", entry.module), Style::new().fg(Color::Cyan)),
-            Span::styled(&entry.message, Style::new().fg(Color::White)),
-        ]))
-    }).collect();
+    let log_items: Vec<ListItem> = app
+        .logs
+        .iter()
+        .rev()
+        .skip(app.log_scroll)
+        .take(50)
+        .map(|entry| {
+            let level_color = match entry.level.as_str() {
+                "ERROR" => Color::Red,
+                "WARN" => Color::Yellow,
+                "INFO" => Color::Green,
+                "DEBUG" => Color::Blue,
+                _ => Color::White,
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(
+                    format!("{} ", entry.timestamp),
+                    Style::new().fg(Color::DarkGray),
+                ),
+                Span::styled(
+                    format!("[{:<5}] ", entry.level),
+                    Style::new().fg(level_color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!("{:<20} ", entry.module),
+                    Style::new().fg(Color::Cyan),
+                ),
+                Span::styled(&entry.message, Style::new().fg(Color::White)),
+            ]))
+        })
+        .collect();
 
-    let log_list = List::new(log_items)
-        .block(Block::default().borders(Borders::ALL).title(" Live Log Stream ").border_style(Style::new().fg(Color::Cyan)));
+    let log_list = List::new(log_items).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Live Log Stream ")
+            .border_style(Style::new().fg(Color::Cyan)),
+    );
     frame.render_widget(log_list, area);
 }
 
-fn render_config(frame: &mut Frame, area: Rect, app: &GrymTuiApp) {
+fn render_config(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
     let chunks = Layout::vertical([
         Constraint::Length(5),
         Constraint::Length(5),
@@ -323,8 +489,12 @@ Technique Tiers:
   [2] Standard Detection — Full signature + safe active checks
   [3] Authenticated — Operator-supplied credentials
   [4] Active Validation — OOB-confirmed validation per finding";
-    let tier_widget = Paragraph::new(tier_info)
-        .block(Block::default().borders(Borders::ALL).title(" Technique Tiers ").border_style(Style::new().fg(Color::Yellow)));
+    let tier_widget = Paragraph::new(tier_info).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Technique Tiers ")
+            .border_style(Style::new().fg(Color::Yellow)),
+    );
     frame.render_widget(tier_widget, tier_area);
 
     let deepness_info = "\
@@ -333,8 +503,12 @@ Deepness Profiles:
   Standard — Balanced default
   Deep     — Broader coverage, no risky validation
   Paranoid — Lowest-noise, highest-review profile";
-    let deepness_widget = Paragraph::new(deepness_info)
-        .block(Block::default().borders(Borders::ALL).title(" Deepness Profiles ").border_style(Style::new().fg(Color::Cyan)));
+    let deepness_widget = Paragraph::new(deepness_info).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Deepness Profiles ")
+            .border_style(Style::new().fg(Color::Cyan)),
+    );
     frame.render_widget(deepness_widget, deepness_area);
 
     let limits_info = format!(
@@ -345,44 +519,138 @@ Deepness Profiles:
         app.metrics.low_severity,
         app.metrics.info_count,
     );
-    let limits_widget = Paragraph::new(limits_info)
-        .block(Block::default().borders(Borders::ALL).title(" Limits & Safety ").border_style(Style::new().fg(Color::Green)));
+    let limits_widget = Paragraph::new(limits_info).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Limits & Safety ")
+            .border_style(Style::new().fg(Color::Green)),
+    );
     frame.render_widget(limits_widget, limits_area);
 }
 
-fn render_help_overlay(frame: &mut Frame) {
+const HELP_CONTENT: &[&str] = &[
+    "GRYM TUI — Help & Controls",
+    "",
+    "NAVIGATION CONTROLS",
+    "  [1] Dashboard  [2] Scanner  [3] Findings  [4] Logs  [5] Config",
+    "  [Tab] / [Shift+Tab] — Next / previous tab",
+    "  [←] / [→]           — Switch tabs (same as Tab/Shift+Tab)",
+    "  [↑] / [↓] or [k] / [j] — Move selection up / down",
+    "  [PageUp] / [PageDown] — Fast scroll in Logs / Help",
+    "  [Home] / [End]      — Jump to top / bottom of Help",
+    "  [Enter]             — View selected finding details",
+    "",
+    "MOUSE CONTROLS",
+    "  • Click a tab in the header bar to switch tabs instantly.",
+    "  • Click a finding in the Findings list to select it.",
+    "  • Scroll wheel (or trackpad) scrolls Logs and Findings lists.",
+    "  • Click the [h] Help button in the footer to open this help screen.",
+    "  • Click anywhere inside the help screen, or the Close button, to close it.",
+    "",
+    "USAGE CONTROLS",
+    "  • Dashboard: live status, request counts, blocked requests, elapsed time.",
+    "  • Scanner: review available modules. From the CLI use 'grym scan <target>'",
+    "            or launch the web dashboard/API to start real scans.",
+    "  • Findings: browse, select, and inspect every discovered issue.",
+    "  • Logs: real-time stream from all modules. Scroll with wheel/Page keys.",
+    "  • Config: current technique tiers and deepness profiles.",
+    "",
+    "TAB DESCRIPTIONS",
+    "  1 Dashboard — Overview, scan status, severity counts, active modules.",
+    "  2 Scanner   — Available modules: DNS enum, port scan, web crawler, tech",
+    "              fingerprint, vulnerability scan, and CVE correlation.",
+    "  3 Findings  — List + detail pane for all discovered vulnerabilities.",
+    "  4 Logs      — Live log stream from scanner, transport, and core modules.",
+    "  5 Config    — Technique tiers (Passive -> Active Validation) and safety",
+    "              limits (rate limits, redirect depth, block thresholds).",
+    "",
+    "SAFETY & SCOPE",
+    "  GRYM will refuse to send any traffic unless a valid scope.toml is loaded.",
+    "  Keep scope limited, authorized, and time-bound. Never point at systems you",
+    "  do not own or have explicit written permission to test.",
+    "",
+    "ACTIONS",
+    "  [h]        — Toggle this help screen",
+    "  [q] / [Esc] — Quit the TUI (or close this help screen)",
+];
+
+fn render_help_overlay(frame: &mut Frame, app: &mut GrymTuiApp) {
     let area = frame.area();
-    let help_text = "\
-GRYM TUI — Keyboard Shortcuts
+    let popup = centered_rect(85, 85, area);
 
-Navigation:
-  [1-5] or [Tab/Shift+Tab] — Switch tabs
-  [↑/↓]  — Navigate lists
-  [Enter] — Select / view details
+    // Clear the background so the popup stands out.
+    frame.render_widget(Clear, popup);
 
-Actions:
-  [h]    — Toggle this help screen
-  [q/Esc] — Quit
+    let inner = popup.inner(ratatui::layout::Margin {
+        horizontal: 1,
+        vertical: 1,
+    });
+    let button_height = 1u16;
+    let content_height = inner.height.saturating_sub(button_height + 1);
+    let [content_area, button_area] = Layout::vertical([
+        Constraint::Length(content_height),
+        Constraint::Length(button_height),
+    ])
+    .areas::<2>(inner);
 
-Tabs:
-  1 Dashboard — Overview of scan status, findings count, module states
-  2 Scanner   — Configure and launch scan modules
-  3 Findings  — Browse and inspect findings with full details
-  4 Logs      — Real-time log stream from all modules
-  5 Config    — View current technique tier and deepness profiles
+    let lines: Vec<Line> = HELP_CONTENT
+        .iter()
+        .enumerate()
+        .map(|(i, line)| {
+            let style = if i == 0 {
+                Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+            } else if line.starts_with("NAVIGATION")
+                || line.starts_with("MOUSE")
+                || line.starts_with("USAGE")
+                || line.starts_with("TAB")
+                || line.starts_with("SAFETY")
+                || line.starts_with("ACTIONS")
+            {
+                Style::new().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            } else if line.starts_with("  •") || line.starts_with("  [") {
+                Style::new().fg(Color::White)
+            } else {
+                Style::new().fg(Color::Gray)
+            };
+            Line::from(Span::styled(*line, style))
+        })
+        .collect();
 
-Scan Modules:
-  • DNS Enumeration — Subdomain discovery via CT logs + brute force
-  • Port Scanner    — Async TCP connect scan of common service ports
-  • Web Crawler     — SPA-aware crawling with JS endpoint discovery
-  • Tech Fingerprint — Header/cookie/favicon technology detection
-  • Vuln Scanner    — SQLi, XSS, SSTI, JWT, SSRF, CORS, IDOR checks
-  • CVE Correlator  — NVD/OSV/KEV/GHSA multi-source matching
-
-Press [q] or [Esc] to close this help screen.";
+    let help_text = Text::from(lines);
     let help_paragraph = Paragraph::new(help_text)
-        .block(Block::default().borders(Borders::ALL).title(" Help ").border_style(Style::new().fg(Color::Yellow)))
-        .style(Style::new().fg(Color::White))
-        .alignment(ratatui::layout::Alignment::Left);
-    frame.render_widget(help_paragraph, area);
+        .block(Block::default().borders(Borders::NONE))
+        .scroll((app.help_scroll as u16, 0));
+    frame.render_widget(help_paragraph, content_area);
+
+    // Render a clickable Close button in the bottom-right of the popup.
+    let close_label = " [ Close ] ";
+    let close_width = close_label.len() as u16;
+    let close_x = button_area.x + button_area.width.saturating_sub(close_width + 2);
+    let close_rect = Rect {
+        x: close_x,
+        y: button_area.y,
+        width: close_width,
+        height: 1,
+    };
+    let close = Paragraph::new(close_label).style(
+        Style::new()
+            .fg(Color::Black)
+            .bg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+    );
+    frame.render_widget(close, close_rect);
+    app.help_close_area = Some(close_rect);
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let popup_width = area.width * percent_x / 100;
+    let popup_height = area.height * percent_y / 100;
+    let x = area.width.saturating_sub(popup_width) / 2;
+    let y = area.height.saturating_sub(popup_height) / 2;
+    Rect {
+        x: area.x + x,
+        y: area.y + y,
+        width: popup_width,
+        height: popup_height,
+    }
 }

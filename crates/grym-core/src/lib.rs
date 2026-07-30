@@ -10,6 +10,7 @@ pub mod config;
 pub mod finding;
 pub mod redaction;
 pub mod scope;
+pub mod settings;
 pub mod transport;
 
 pub use audit::{AuditEvent, AuditSink, FileAuditLog, MemoryAuditLog};

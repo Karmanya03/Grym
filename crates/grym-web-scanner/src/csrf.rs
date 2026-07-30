@@ -1,4 +1,7 @@
-use grym_core::{Confidence, Evidence, Finding, AssetRef, ScopedClient, ScopedClientError, Severity, TechniqueTier};
+use grym_core::{
+    AssetRef, Confidence, Evidence, Finding, ScopedClient, ScopedClientError, Severity,
+    TechniqueTier,
+};
 
 const CSRF_HEADERS: &[&str] = &[
     "x-csrf-token",
@@ -57,7 +60,10 @@ fn extract_forms(body: &str) -> Vec<(usize, String)> {
 
 fn form_has_csrf_protection(form_body: &str) -> bool {
     let lower = form_body.to_lowercase();
-    let Ok(hidden_input_re) = regex::Regex::new(r#"<input[^>]*type\s*=\s*["']?hidden["']?[^>]*>"#) else { return false };
+    let Ok(hidden_input_re) = regex::Regex::new(r#"<input[^>]*type\s*=\s*["']?hidden["']?[^>]*>"#)
+    else {
+        return false;
+    };
     for cap in hidden_input_re.find_iter(&lower) {
         let input = cap.as_str();
         if CSRF_HEADERS.iter().any(|h| {
@@ -85,33 +91,50 @@ fn check_cookie_attributes(response_headers: &[(String, String)]) -> Vec<Finding
         if lower.contains("samesite=none") {
             let mut f = Finding::new(
                 "Cookie with SameSite=None — CSRF exposure risk",
-                AssetRef { identifier: String::new(), kind: "web".into() },
-                Severity::Medium, Confidence::Confirmed, "grym-web-scanner",
+                AssetRef {
+                    identifier: String::new(),
+                    kind: "web".into(),
+                },
+                Severity::Medium,
+                Confidence::Confirmed,
+                "grym-web-scanner",
             );
             f.categories.push("A01:2025-Broken-Access-Control".into());
             f.cwe_ids.push(352);
             f.evidence.push(Evidence::redacted(
-                "cookie", format!("SameSite=None cookie: {}", value), String::new(),
+                "cookie",
+                format!("SameSite=None cookie: {}", value),
+                String::new(),
             ));
             f.remediation = "Set SameSite=Lax or SameSite=Strict on session cookies. \
-                Avoid SameSite=None unless cross-site usage is explicitly required.".into();
-            f.references.push("https://owasp.org/www-community/attacks/csrf".into());
+                Avoid SameSite=None unless cross-site usage is explicitly required."
+                .into();
+            f.references
+                .push("https://owasp.org/www-community/attacks/csrf".into());
             findings.push(f);
         }
 
         if !lower.contains("samesite") {
             let mut f = Finding::new(
                 "Missing SameSite cookie attribute",
-                AssetRef { identifier: String::new(), kind: "web".into() },
-                Severity::Low, Confidence::Possible, "grym-web-scanner",
+                AssetRef {
+                    identifier: String::new(),
+                    kind: "web".into(),
+                },
+                Severity::Low,
+                Confidence::Possible,
+                "grym-web-scanner",
             );
             f.categories.push("A01:2025-Broken-Access-Control".into());
             f.cwe_ids.push(352);
             f.evidence.push(Evidence::redacted(
-                "cookie", format!("No SameSite attribute on cookie: {}", value), String::new(),
+                "cookie",
+                format!("No SameSite attribute on cookie: {}", value),
+                String::new(),
             ));
             f.remediation = "Set SameSite=Lax or SameSite=Strict on session cookies.".into();
-            f.references.push("https://owasp.org/www-community/attacks/csrf".into());
+            f.references
+                .push("https://owasp.org/www-community/attacks/csrf".into());
             findings.push(f);
         }
     }
@@ -126,27 +149,41 @@ pub async fn check_csrf(
     let mut findings = Vec::new();
 
     let response = client
-        .get("grym-web-scanner", url.clone(), TechniqueTier::StandardDetection)
+        .get(
+            "grym-web-scanner",
+            url.clone(),
+            TechniqueTier::StandardDetection,
+        )
         .await?;
 
     let body = &response.body;
-    let headers: Vec<(String, String)> = response.headers.iter()
+    let headers: Vec<(String, String)> = response
+        .headers
+        .iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect();
 
     if !has_anti_csrf_headers(&headers) {
         let mut f = Finding::new(
             "No anti-CSRF headers found in response",
-            AssetRef { identifier: url.to_string(), kind: "web".into() },
-            Severity::Medium, Confidence::Possible, "grym-web-scanner",
+            AssetRef {
+                identifier: url.to_string(),
+                kind: "web".into(),
+            },
+            Severity::Medium,
+            Confidence::Possible,
+            "grym-web-scanner",
         );
         f.categories.push("A01:2025-Broken-Access-Control".into());
         f.cwe_ids.push(352);
         f.evidence.push(Evidence::redacted(
-            "csrf-headers", "Response does not include common anti-CSRF headers", String::new(),
+            "csrf-headers",
+            "Response does not include common anti-CSRF headers",
+            String::new(),
         ));
         f.remediation = "Implement anti-CSRF tokens using Synchronizer Token Pattern \
-            or Double Submit Cookie Pattern. Include headers like X-CSRF-Token.".into();
+            or Double Submit Cookie Pattern. Include headers like X-CSRF-Token."
+            .into();
         f.references.push("https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html".into());
         findings.push(f);
     }
@@ -156,17 +193,24 @@ pub async fn check_csrf(
         if !form_has_csrf_protection(form_html) {
             let mut f = Finding::new(
                 "Form without CSRF protection detected",
-                AssetRef { identifier: url.to_string(), kind: "web".into() },
-                Severity::High, Confidence::Confirmed, "grym-web-scanner",
+                AssetRef {
+                    identifier: url.to_string(),
+                    kind: "web".into(),
+                },
+                Severity::High,
+                Confidence::Confirmed,
+                "grym-web-scanner",
             );
             f.categories.push("A01:2025-Broken-Access-Control".into());
             f.cwe_ids.push(352);
             f.evidence.push(Evidence::redacted(
-                "csrf-form", "Form missing CSRF token hidden input",
+                "csrf-form",
+                "Form missing CSRF token hidden input",
                 form_html.chars().take(300).collect::<String>(),
             ));
             f.remediation = "Add a unique, per-session CSRF token as a hidden form field \
-                and validate it server-side on state-changing requests.".into();
+                and validate it server-side on state-changing requests."
+                .into();
             f.references.push("https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html".into());
             findings.push(f);
         }
@@ -176,17 +220,24 @@ pub async fn check_csrf(
     for token in &weak_tokens {
         let mut f = Finding::new(
             format!("Weak CSRF token pattern detected: {}", token),
-            AssetRef { identifier: url.to_string(), kind: "web".into() },
-            Severity::High, Confidence::Likely, "grym-web-scanner",
+            AssetRef {
+                identifier: url.to_string(),
+                kind: "web".into(),
+            },
+            Severity::High,
+            Confidence::Likely,
+            "grym-web-scanner",
         );
         f.categories.push("A01:2025-Broken-Access-Control".into());
         f.cwe_ids.push(352);
         f.evidence.push(Evidence::redacted(
-            "csrf-weak-token", "Token appears short, numeric, or predictable",
+            "csrf-weak-token",
+            "Token appears short, numeric, or predictable",
             token.clone(),
         ));
         f.remediation = "Generate CSRF tokens using a cryptographically secure random generator. \
-            Tokens should be at least 128 bits (32 hex characters).".into();
+            Tokens should be at least 128 bits (32 hex characters)."
+            .into();
         f.references.push("https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html".into());
         findings.push(f);
     }

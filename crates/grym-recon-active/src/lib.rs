@@ -1,20 +1,22 @@
 #![deny(unsafe_code)]
 
-mod port_scanner;
-mod vhost;
 mod crawler;
 mod parameter_discovery;
+mod port_scanner;
+mod vhost;
 
-pub use port_scanner::*;
-pub use vhost::*;
 pub use crawler::*;
 pub use parameter_discovery::*;
+pub use port_scanner::*;
+pub use vhost::*;
 
+use grym_core::{
+    AssetRef, Confidence, Evidence, Finding, HttpResponseSnapshot, ScopedClient, ScopedClientError,
+    Severity, TechniqueTier,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
-use grym_core::{HttpResponseSnapshot, ScopedClient, ScopedClientError, TechniqueTier,
-                Finding, AssetRef, Severity, Confidence, Evidence};
 
 /// Read-only probe result.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -76,8 +78,14 @@ pub fn probe_to_finding(probe: &ProbeResult) -> Option<Finding> {
         );
         finding.evidence.push(Evidence::redacted(
             "http-probe",
-            format!("Status: {}, Response time: {}ms", probe.status, probe.response_time_ms),
-            format!("URL: {} | Status: {} | Time: {}ms", probe.url, probe.status, probe.response_time_ms),
+            format!(
+                "Status: {}, Response time: {}ms",
+                probe.status, probe.response_time_ms
+            ),
+            format!(
+                "URL: {} | Status: {} | Time: {}ms",
+                probe.url, probe.status, probe.response_time_ms
+            ),
         ));
         Some(finding)
     } else {

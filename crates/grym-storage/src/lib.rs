@@ -4,8 +4,8 @@
 
 use std::sync::RwLock;
 
-use thiserror::Error;
 use grym_core::Finding;
+use thiserror::Error;
 
 /// Store access failure.
 #[derive(Debug, Error)]

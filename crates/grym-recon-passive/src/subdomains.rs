@@ -1,8 +1,8 @@
 //! Subdomain enumeration via multiple passive sources.
 
-use serde::{Deserialize, Serialize};
 use crate::{ct_logs, dns};
-use grym_core::{Confidence, Finding, AssetRef, Severity, Evidence};
+use grym_core::{AssetRef, Confidence, Evidence, Finding, Severity};
+use serde::{Deserialize, Serialize};
 
 /// A discovered subdomain with metadata.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -50,10 +50,7 @@ pub async fn enumerate_subdomains(domain: &str) -> Vec<SubdomainResult> {
 }
 
 /// Generates findings from discovered subdomains.
-pub fn subdomains_to_findings(
-    subdomains: &[SubdomainResult],
-    _domain: &str,
-) -> Vec<Finding> {
+pub fn subdomains_to_findings(subdomains: &[SubdomainResult], _domain: &str) -> Vec<Finding> {
     let mut findings = Vec::new();
 
     for sub in subdomains {
@@ -74,7 +71,9 @@ pub fn subdomains_to_findings(
             format!("{} → {:?}", sub.hostname, sub.ips),
         ));
         if !sub.ips.is_empty() {
-            finding.references.push(format!("IPs: {}", sub.ips.join(", ")));
+            finding
+                .references
+                .push(format!("IPs: {}", sub.ips.join(", ")));
         }
         findings.push(finding);
     }

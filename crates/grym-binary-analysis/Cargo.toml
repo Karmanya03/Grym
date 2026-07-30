@@ -4,11 +4,18 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Feature-gated binary analysis contracts for GRYM."
+description = "Advanced binary analysis for PE/ELF/Mach-O: hardening, packers, anti-debug, crypto, YARA, entropy."
 
 [lints]
 workspace = true
 
 [dependencies]
+goblin.workspace = true
 serde.workspace = true
+sha2.workspace = true
+sha1.workspace = true
+hex.workspace = true
+regex.workspace = true
+thiserror.workspace = true
 
+grym-core = { path = "../grym-core" }

@@ -2,10 +2,10 @@
 
 #![deny(unsafe_code)]
 
+use grym_core::{AssetRef, Confidence, Evidence, Finding, HttpResponseSnapshot, Severity};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use grym_core::{AssetRef, Confidence, Evidence, Finding, HttpResponseSnapshot, Severity};
 
 /// Serializable safe detection template.
 #[derive(Clone, Debug, Deserialize, Serialize)]
