@@ -1,10 +1,20 @@
-# GRYM
+<p align="center">
+  <img src="assets/GRYM_LOGO.png" alt="GRYM logo" width="180">
+</p>
 
-[![Rust 1.94+](https://img.shields.io/badge/rust-1.94%2B-orange.svg)](https://www.rust-lang.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)
-[![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://doc.rust-lang.org/nomicon/meet-safe-and-unsafe.html)
-[![Workspace tests](https://img.shields.io/badge/tests-passing-success.svg)](crates)
-[![Docs](https://img.shields.io/badge/docs-ARCHITECTURE.md-blue.svg)](docs/ARCHITECTURE.md)
+<p align="center">
+  <img src="assets/GRYM_BANNER.png" alt="GRYM banner" width="640">
+</p>
+
+<p align="center">
+  <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/Rust-1.94%2B-orange.svg" alt="Rust 1.94+"></a>
+  <a href="LICENSE.md"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/unsafe-forbidden-success.svg" alt="unsafe forbidden">
+  <img src="https://img.shields.io/badge/Workspace%20tests-passing-success.svg" alt="Workspace tests">
+  <a href="docs/ARCHITECTURE.md"><img src="https://img.shields.io/badge/Docs-ARCHITECTURE.md-blue.svg" alt="Docs"></a>
+</p>
+
+# GRYM
 
 > A Rust-native security assessment toolkit that is **paranoid by default**.  
 > If you are looking for a tool that will cheerfully scan the public internet for you, this is not it.  
@@ -26,6 +36,7 @@ GRYM is a web-application penetration-testing and vulnerability-research platfor
 - [Browser extension](#browser-extension)
 - [Safety model](#safety-model)
 - [Workspace crates](#workspace-crates)
+- [FAQ](#faq)
 - [Contributing](#contributing)
 - [License](#license)
 - [Disclaimer](#disclaimer)
@@ -42,7 +53,7 @@ The guiding principles are:
 2. **Attestation is not optional.** Active techniques require a typed, in-memory authorization phrase.
 3. **Defense in depth.** Rate limits, circuit breakers, redirect re-authorization, and evidence redaction are not afterthoughts.
 4. **Exploration without destruction.** Detection is response-signature based and non-destructive by default; active validation is gated behind technique tiers.
-5. **Batteries included, safety first.** CVE correlation, exploit generation, zero-day prediction, and multi-step attack chains are built in, but they are all scoped.
+5. **Batteries included, safety first.** CVE correlation, exploit generation, zero-day prediction, multi-step attack chains, and an AI agent are built in, but they are all scoped.
 
 ---
 
@@ -64,11 +75,12 @@ flowchart TB
     end
 
     subgraph modules["Scanner Modules"]
-        WEB["grym-web-scanner<br/>20 detection modules"]
+        WEB["grym-web-scanner<br/>20+ detection modules"]
         CVE["grym-cve-intel<br/>CVE DB + prediction"]
         RECON["grym-recon-*"]
         BIN["grym-binary-analysis"]
         MOB["grym-mobile-analysis"]
+        AGENT["grym-ai-agent<br/>autonomous reasoning"]
     end
 
     subgraph outputs["Outputs"]
@@ -88,8 +100,10 @@ flowchart TB
     TRANSPORT --> RECON
     TRANSPORT --> BIN
     TRANSPORT --> MOB
+    TRANSPORT --> AGENT
     WEB --> STORE
     CVE --> STORE
+    AGENT --> STORE
     STORE --> REPORT
     STORE --> DASH
 ```
@@ -110,7 +124,7 @@ For the deep dive, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### Web vulnerability scanner
 
-`grym-web-scanner` currently includes 20 detection modules:
+`grym-web-scanner` currently includes 20+ detection modules:
 
 | Module | What it looks for |
 | --- | --- |
@@ -137,11 +151,17 @@ For the deep dive, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### CVE intelligence and prediction
 
-- `grym-cve-intel` ships a curated database of 130+ CVE entries with signatures, affected versions, CVSS, remediation, and references.
+- `grym-cve-intel` ships a curated database of **525+ CVE entries** with signatures, affected versions, CVSS, remediation, and references.
 - Correlate a technology fingerprint against the database to find known exploitable versions.
-- Generate auto-PoCs in Python, Go, Rust, curl, Bash, PowerShell, Nuclei YAML, Metasploit Ruby, Node.js, Java, PHP, HTTPie, and Burp Intruder format.
+- Generate auto-PoCs in Python, Go, Rust, curl, Bash, PowerShell, Nuclei YAML, Metasploit Ruby, Node.js, Java, PHP, HTTPie, Burp Intruder, Ruby, Perl, Lua, and C#.
 - Reverse-shell and web-shell generation for authorized red-team exercises.
 - Zero-day prediction engine: estimate future risk for a component and version based on historical patterns, CWE correlations, and response analysis.
+
+### AI agent
+
+- `grym-ai-agent` provides session management, multi-model reasoning, tool registry, and autonomous CVE hunting.
+- It can analyze a target description, generate hypotheses, and propose PoC templates.
+- Like every other module, it cannot touch the network without going through the Scope Guard.
 
 ### Browser extension
 
@@ -151,13 +171,14 @@ A Manifest V3 add-on that works in Chromium, Firefox, and Edge:
 - Full-page dashboard with tabs: **Scanner**, **Findings**, **CVE DB**, **Exploit Gen**, and **Predict**.
 - Content script detects in-page technologies, secrets, forms, and endpoints.
 - Talks to the local `grym serve` API at `http://localhost:9378`.
+- Uses the GRYM logo for toolbar and extension icons.
 
 ### CLI and TUI
 
 - `grym scope validate` — validate a scope file with zero network access.
 - `grym scope show` — render the effective policy.
 - `grym serve` — start the local HTTP API for the extension and automation.
-- `grym-tui` — a keyboard-driven terminal interface for the dashboard.
+- `grym-tui` — a keyboard and mouse-driven terminal interface with a built-in help overlay.
 
 ### Reporting and storage
 
@@ -176,8 +197,6 @@ A Manifest V3 add-on that works in Chromium, Firefox, and Edge:
 - A healthy respect for authorization boundaries.
 
 ### One-line install (recommended)
-
-
 
 #### Linux / macOS (bash/zsh)
 
@@ -378,8 +397,43 @@ All active scanning is delegated to the local `grym serve` process and respects 
 | CVE intelligence and prediction | `grym-cve-intel` |
 | Binary, mobile, and fuzzing contracts | `grym-binary-analysis`, `grym-mobile-analysis`, `grym-fuzz-harness` |
 | OOB, stealth, plugins | `grym-oob-server`, `grym-stealth`, `grym-plugin-runtime` |
-| Storage, reports, dashboard | `grym-storage`, `grym-report`, `grym-dashboard`, `grym-tui` |
+| Storage, reports, dashboard, TUI | `grym-storage`, `grym-report`, `grym-dashboard`, `grym-tui` |
+| AI reasoning and agent | `grym-ai-agent` |
 | Build automation | `xtask` |
+
+---
+
+## FAQ
+
+**Q: Will GRYM scan anything I point it at?**  
+A: Only if you have lied to it very carefully. The Scope Guard denies by default. You must provide an allow rule, stay inside the engagement window, and (for active techniques) type an attestation phrase. If you do all of that against a target you do not own, the tool is not the problem.
+
+**Q: Why do I need to type an attestation phrase?**  
+A: So authorization is a deliberate action, not a config-file checkbox. It lives in memory only and never gets written to disk. Think of it as the "I am not a robot" test for people who want to run exploit payloads.
+
+**Q: Is the exploit code dangerous?**  
+A: The repository only generates local PoC templates. They are strings, not remote-triggered payloads. They become dangerous when an authorized operator runs them against an authorized target. We are not shipping a button labeled "Hack the Planet." That button is you.
+
+**Q: Can I use this for bug bounty?**  
+A: Yes, as long as the program's scope and rules explicitly permit your testing. If the scope is fuzzy, get written clarification. "I thought it was in scope" is not a fun conversation to have with a program manager.
+
+**Q: Why is the TUI so paranoid?**  
+A: The TUI is not paranoid; it is well-informed. It shows the live dashboard, findings, logs, and configuration. It also has a full help overlay you can open with `h` or by clicking the footer. The Scope Guard is the real bouncer, and it works the same in the TUI as it does in the CLI.
+
+**Q: What does the browser extension actually do?**  
+A: It is a remote control for the local `grym serve` process. It reads the page, sends metadata to the server, and displays results. It does not perform exploitation itself. It is a well-behaved extension that asks the server before doing anything risky.
+
+**Q: Why Rust?**  
+A: Because we wanted a type system that makes it hard to accidentally send a payload to the wrong host, and a borrow checker that keeps memory safety honest. Also, compiling the whole workspace feels like a small reward every time it passes.
+
+**Q: I found a bug that lets me bypass the Scope Guard. What do I do?**  
+A: Treat it like a critical vulnerability. Open a private security issue, include a minimal reproduction, and do not publish a bypass technique until it is fixed. The scope guard is the load-bearing wall; if it cracks, everything else wobbles.
+
+**Q: How many CVEs are in the database?**  
+A: Over 525 entries, combining verified base CVEs with generated additional coverage. The exact number is less important than the fact that the exploit generator can produce a PoC template for any of them.
+
+**Q: Can I add my own detection module?**  
+A: Absolutely. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The rules are simple: depend on `grym-core`, use `ScopedClient`, never use `unsafe`, never use `unwrap`, and keep it non-destructive by default.
 
 ---
 

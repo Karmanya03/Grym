@@ -13,7 +13,6 @@ use crate::config::{Deepness, ScopeConfig, TechniqueTier};
 /// Default Ollama endpoint.
 const DEFAULT_OLLAMA_URL: &str = "http://127.0.0.1:11434";
 
-
 /// Path to the settings file (`~/.grym/settings.json` on Linux/macOS,
 /// `%APPDATA%/grym/settings.json` on Windows).
 fn settings_path() -> PathBuf {

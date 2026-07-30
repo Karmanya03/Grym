@@ -1,6 +1,6 @@
 # GRYM Architecture
 
-This document is the deep dive. If the README is the movie trailer, this is the director's commentary, the storyboards, and the safety manual all in one. We will walk through the high-level system, the workspace layout, the Scope Guard lifecycle, the scanner pipeline, the browser extension, and the rules that keep the whole thing from turning into a liability.
+This document is the deep dive. If the README is the movie trailer, this is the director's commentary, the storyboards, and the safety manual all in one. We will walk through the high-level system, the workspace layout, the Scope Guard lifecycle, the scanner pipeline, the browser extension, the AI agent boundary, and the rules that keep the whole thing from turning into a liability.
 
 ---
 
@@ -13,9 +13,10 @@ This document is the deep dive. If the README is the movie trailer, this is the 
 5. [Scanner pipeline](#scanner-pipeline)
 6. [Browser extension data flow](#browser-extension-data-flow)
 7. [CVE intelligence, exploit generation, and prediction](#cve-intelligence-exploit-generation-and-prediction)
-8. [Core data model](#core-data-model)
-9. [Module boundaries and extension rules](#module-boundaries-and-extension-rules)
-10. [Implementation status](#implementation-status)
+8. [AI agent boundary](#ai-agent-boundary)
+9. [Core data model](#core-data-model)
+10. [Module boundaries and extension rules](#module-boundaries-and-extension-rules)
+11. [Implementation status](#implementation-status)
 
 ---
 
@@ -63,6 +64,7 @@ flowchart TB
         RECON["grym-recon-*"]
         BIN["grym-binary-analysis"]
         MOB["grym-mobile-analysis"]
+        AGENT["grym-ai-agent"]
     end
 
     subgraph data["Data and reporting"]
@@ -84,13 +86,15 @@ flowchart TB
     CLIENT --> RECON
     CLIENT --> BIN
     CLIENT --> MOB
+    CLIENT --> AGENT
     WEB --> STORE
     CVE --> STORE
+    AGENT --> STORE
     STORE --> REPORT
     STORE --> DASHBOARD
 ```
 
-The diagram shows the separation of concerns: interfaces never touch the network directly, the core owns authorization and transport, modules own detection logic, and storage/reporting crates own persistence and presentation.
+The diagram shows the separation of concerns: interfaces never touch the network directly, the core owns authorization and transport, modules own detection logic, the AI agent owns reasoning, and storage/reporting crates own persistence and presentation.
 
 ---
 
@@ -105,6 +109,7 @@ graph TD
     CLI --> RA["grym-recon-active"]
     CLI --> STORE["grym-storage"]
     CLI --> REPORT["grym-report"]
+    CLI --> AGENT["grym-ai-agent"]
 
     TUI["grym-tui"] --> CORE
     TUI --> STORE
@@ -123,6 +128,10 @@ graph TD
     PLUGIN["grym-plugin-runtime"] --> CORE
     DASHBOARD["grym-dashboard"] --> CORE
     DASHBOARD --> STORE
+    AGENT --> CORE
+    AGENT --> CVE
+    AGENT --> WEB
+    AGENT --> BIN
 
     STORE --> CORE
     REPORT --> CORE
@@ -136,6 +145,7 @@ A few things to notice:
 - Every module crate eventually depends on `grym-core`. No module crate depends on another module crate.
 - `grym-cli` and `grym-tui` are thin shells. They orchestrate; they do not implement detection.
 - `grym-template-engine` is a pure data crate. It knows how to match signatures, not how to fetch them.
+- `grym-ai-agent` depends on several module crates but only through their public, safe interfaces. It never talks to the network directly.
 - `xtask` is the build-automation crate and only touches stable public interfaces.
 
 ---
@@ -283,13 +293,13 @@ flowchart TB
     end
 
     subgraph cve["CVE intelligence"]
-        DB[("CVE database<br/>130+ entries")]
+        DB[("CVE database<br/>525+ entries")]
         LOOKUP["Correlation engine"]
     end
 
     subgraph exploit["Exploit generation"]
         GEN["PoC generator"]
-        FORMATS["Output formats:<br/>Python, Go, Rust, curl, Bash,<br/>PowerShell, Nuclei, Metasploit,<br/>Node.js, Java, PHP, HTTPie,<br/>Burp Intruder"]
+        FORMATS["Output formats:<br/>Python, Go, Rust, curl, Bash,<br/>PowerShell, Nuclei, Metasploit,<br/>Node.js, Java, PHP, HTTPie,<br/>Burp Intruder, Ruby, Perl,<br/>Lua, C#"]
     end
 
     subgraph predict["Zero-day prediction"]
@@ -318,6 +328,46 @@ The intelligence subsystem is split into three responsibilities:
 - **CVE lookup.** Given a technology fingerprint and version, return matching CVEs with signatures, CVSS, and remediation.
 - **Exploit generation.** Given a CVE, emit a safe, local PoC in the requested format. This is source code, not a remote payload. It is up to the operator to use it only inside the authorized scope.
 - **Zero-day prediction.** Mine historical patterns and CWE correlations to estimate how likely a component/version is to have an unpatched vulnerability class. This is research-grade inference, not magic.
+
+---
+
+## AI agent boundary
+
+`grym-ai-agent` adds autonomous reasoning on top of the same safe boundaries.
+
+```mermaid
+flowchart LR
+    subgraph input["Agent input"]
+        QUERY["User query / target description"]
+        SESSION["Session store"]
+    end
+
+    subgraph agent["grym-ai-agent"]
+        REASON["Reasoning loop"]
+        TOOLS["Tool registry"]
+        HUNT["CVE hunter"]
+    end
+
+    subgraph core["Core enforcement"]
+        SCOPE["Scope Guard"]
+        CLIENT["ScopedClient"]
+    end
+
+    QUERY --> REASON
+    SESSION --> REASON
+    REASON --> TOOLS
+    REASON --> HUNT
+    TOOLS --> SCOPE
+    HUNT --> SCOPE
+    SCOPE --> CLIENT
+```
+
+Key points:
+
+- The agent never holds a raw HTTP client. When it needs network data, it calls a tool that routes through `ScopedClient`.
+- The tool registry is explicit. Adding a new capability means adding a typed tool, not giving the model an open socket.
+- Sessions are bounded and evicted by age/count. The agent cannot accumulate infinite state.
+- The CVE hunter generates hypotheses and PoC templates, but the actual execution is delegated to the scanner modules under the same scope rules.
 
 ---
 
@@ -411,10 +461,11 @@ If you add a crate or a module, follow these rules. They are not suggestions.
 
 - Phase 0 scope schema, typed attestation gate, deny-first policy evaluation, structured audit trail, bounded scoped HTTP, rate limits, and circuit breaker.
 - `grym-cli` with `scope validate`, `scope show`, and `serve`.
-- `grym-web-scanner` with 20 detection modules, fuzzer, chain builder, CVE DB, exploit generator, and payload generator.
+- `grym-web-scanner` with 20+ detection modules, fuzzer, chain builder, 525+ entry CVE DB, exploit generator, and payload generator.
 - `grym-cve-intel` with zero-day prediction engine and response-body analysis.
-- `grym-tui` with dashboard, scanner, findings, logs, and config tabs.
-- Cross-browser Manifest V3 extension in `browser-ext/`.
+- `grym-tui` with dashboard, scanner, findings, logs, and config tabs; full mouse support and a scrollable help overlay.
+- Cross-browser Manifest V3 extension in `browser-ext/` with GRYM logo icons.
+- `grym-ai-agent` with session management, tool registry, and autonomous CVE hunting.
 - Versioned mapping packs, safe signature-template parsing, and fixture definitions.
 - Cross-platform CI configuration, editor setup, dependency-policy configuration, and mapping validation.
 
@@ -429,16 +480,4 @@ If you add a crate or a module, follow these rules. They are not suggestions.
 
 ---
 
-## Specification provenance
-
-This architecture implements the project briefs in `.plans/`:
-
-- `01_MASTER_PROMPT - WEB-APP PT Tool.md`
-- `02_BUILD_PLAN - WEB-APP PT Tool.md`
-- `03_ARCHITECTURE_AND_PROJECT_STRUCTURE - WEB-APP PT Tool.md`
-
-Those files remain authoritative for roadmap depth. This document records the executable design and the guardrails that keep it safe.
-
----
-
-**In short:** interfaces ask, the core decides, modules detect, storage remembers, and the Scope Guard keeps everyone honest. Build accordingly.
+**In short:** interfaces ask, the core decides, modules detect, the agent reasons, storage remembers, and the Scope Guard keeps everyone honest. Build accordingly.

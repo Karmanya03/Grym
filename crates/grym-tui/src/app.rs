@@ -120,7 +120,10 @@ impl GrymTuiApp {
         }
     }
 
-    pub async fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> anyhow::Result<()> {
+    pub async fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> anyhow::Result<()>
+    where
+        B::Error: Send + Sync + 'static,
+    {
         let tick_rate = self.tick_rate;
         loop {
             terminal.draw(|frame| ui::render(frame, self))?;

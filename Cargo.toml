@@ -60,7 +60,7 @@ url = { version = "2.5.8", features = ["serde"] }
 uuid = { version = "1.22.0", features = ["serde", "v7"] }
 
 # TUI dependencies
-ratatui = "0.29"
+ratatui = "0.30"
 crossterm = "0.28"
 syntect = "5.2"
 tokio-stream = "0.1"
