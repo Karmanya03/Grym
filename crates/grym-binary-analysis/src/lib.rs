@@ -587,9 +587,7 @@ fn analyze_strings(data: &[u8], min_length: usize) -> StringsAnalysis {
     let mut high_entropy = Vec::new();
 
     let text = String::from_utf8_lossy(data);
-    let lines: Vec<&str> = text
-        .split(|c| c == '\n' || c == '\r' || c == '\0')
-        .collect();
+    let lines: Vec<&str> = text.split(['\n', '\r', '\0']).collect();
 
     for line in &lines {
         if line.len() < min_length {
@@ -597,25 +595,24 @@ fn analyze_strings(data: &[u8], min_length: usize) -> StringsAnalysis {
         }
         let trimmed = line.trim();
 
-        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-            if !urls.iter().any(|x: &String| x == trimmed) {
-                urls.push(trimmed.to_string());
-            }
+        if (trimmed.starts_with("http://") || trimmed.starts_with("https://"))
+            && !urls.iter().any(|x: &String| x == trimmed)
+        {
+            urls.push(trimmed.to_string());
         }
-        if trimmed.starts_with("HKEY_") || trimmed.contains("\\Software\\") {
-            if !registry_paths.iter().any(|x: &String| x == trimmed) {
-                registry_paths.push(trimmed.to_string());
-            }
+        if (trimmed.starts_with("HKEY_") || trimmed.contains("\\Software\\"))
+            && !registry_paths.iter().any(|x: &String| x == trimmed)
+        {
+            registry_paths.push(trimmed.to_string());
         }
         if (trimmed.starts_with("C:\\")
             || trimmed.starts_with("D:\\")
             || trimmed.starts_with('/')
             || trimmed.starts_with("./"))
             && trimmed.len() > 5
+            && !file_paths.iter().any(|x: &String| x == trimmed)
         {
-            if !file_paths.iter().any(|x: &String| x == trimmed) {
-                file_paths.push(trimmed.to_string());
-            }
+            file_paths.push(trimmed.to_string());
         }
         if trimmed.contains('@') && trimmed.contains('.') {
             let parts: Vec<&str> = trimmed.split('@').collect();
@@ -814,7 +811,7 @@ fn extract_macho_sections(macho: &goblin::mach::Mach<'_>) -> Vec<SectionInfo> {
                         name,
                         virtual_address: section.addr,
                         virtual_size: section.size,
-                        raw_size: seg.filesize as u64,
+                        raw_size: seg.filesize,
                         entropy: 0.0,
                         characteristics: Vec::new(),
                         executable: section.flags & 0x80000000 != 0,
@@ -1163,13 +1160,13 @@ fn extract_compile_info(object: &goblin::Object<'_>, data: &[u8]) -> CompileInfo
         }
     }
 
-    if let goblin::Object::PE(pe) = object {
-        if let Some(ref oh) = pe.header.optional_header {
-            linker_version = Some(format!(
-                "{}.{}",
-                oh.standard_fields.major_linker_version, oh.standard_fields.minor_linker_version
-            ));
-        }
+    if let goblin::Object::PE(pe) = object
+        && let Some(ref oh) = pe.header.optional_header
+    {
+        linker_version = Some(format!(
+            "{}.{}",
+            oh.standard_fields.major_linker_version, oh.standard_fields.minor_linker_version
+        ));
     }
 
     let debug_present = text.contains(".debug")
@@ -1297,7 +1294,7 @@ pub fn findings_from_analysis(result: &BinaryAnalysisResult) -> Vec<grym_core::F
             findings.push(new_finding(
                 &format!("High entropy sections: {}", high_entropy_secs.join(", ")),
                 "medium",
-                format!("Entropy > 7.0 suggests packing/encryption"),
+                "Entropy > 7.0 suggests packing/encryption".to_string(),
                 "Investigate packed/encrypted sections",
                 vec!["SEC-MALWARE-ANALYSIS".into()],
             ));

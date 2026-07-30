@@ -13,15 +13,6 @@ use crate::config::{Deepness, ScopeConfig, TechniqueTier};
 /// Default Ollama endpoint.
 const DEFAULT_OLLAMA_URL: &str = "http://127.0.0.1:11434";
 
-/// Well-known Ollama installation paths for auto-detection.
-const OLLAMA_PATHS: &[&str] = &[
-    "ollama",
-    "ollama.exe",
-    "/usr/local/bin/ollama",
-    "/usr/bin/ollama",
-    "C:\\Program Files\\Ollama\\ollama.exe",
-    "C:\\Program Files (x86)\\Ollama\\ollama.exe",
-];
 
 /// Path to the settings file (`~/.grym/settings.json` on Linux/macOS,
 /// `%APPDATA%/grym/settings.json` on Windows).
@@ -346,6 +337,7 @@ impl GrymSettings {
         }
     }
 
+    /// Queries the configured Ollama server for available models and version.
     pub async fn update_ollama_info(&mut self) {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(5))
@@ -360,15 +352,13 @@ impl GrymSettings {
                 ))
                 .send()
                 .await
+                && let Ok(data) = resp.json::<serde_json::Value>().await
+                && let Some(models) = data["models"].as_array()
             {
-                if let Ok(data) = resp.json::<serde_json::Value>().await {
-                    if let Some(models) = data["models"].as_array() {
-                        self.ollama.available_models = models
-                            .iter()
-                            .filter_map(|m| m["name"].as_str().map(String::from))
-                            .collect();
-                    }
-                }
+                self.ollama.available_models = models
+                    .iter()
+                    .filter_map(|m| m["name"].as_str().map(String::from))
+                    .collect();
             }
 
             // Get version
@@ -379,10 +369,9 @@ impl GrymSettings {
                 ))
                 .send()
                 .await
+                && let Ok(data) = resp.json::<serde_json::Value>().await
             {
-                if let Ok(data) = resp.json::<serde_json::Value>().await {
-                    self.ollama.version = data["version"].as_str().map(String::from);
-                }
+                self.ollama.version = data["version"].as_str().map(String::from);
             }
         }
     }
@@ -431,14 +420,14 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used, clippy::expect_used)]
     fn test_scope_settings_roundtrip() {
         let settings = ScopeSettings::default();
-        if let Ok(config) = settings.to_scope_config() {
-            let rt = ScopeSettings::from_scope_config(&config);
-            assert_eq!(settings.engagement_id, rt.engagement_id);
-            assert_eq!(settings.client, rt.client);
-        } else {
-            assert!(false, "to_scope_config should succeed for default settings");
-        }
+        let config = settings
+            .to_scope_config()
+            .expect("to_scope_config should succeed for default settings");
+        let rt = ScopeSettings::from_scope_config(&config);
+        assert_eq!(settings.engagement_id, rt.engagement_id);
+        assert_eq!(settings.client, rt.client);
     }
 }

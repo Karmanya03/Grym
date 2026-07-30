@@ -1,3 +1,5 @@
+//! Out-of-band (OOB) interaction server for confirming external callbacks.
+
 #![deny(unsafe_code)]
 
 use std::collections::HashMap;
@@ -13,13 +15,18 @@ use uuid::Uuid;
 /// A correlation token for OOB-based vulnerability confirmation.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct OobToken {
+    /// Unique token value used to correlate callbacks.
     pub value: Uuid,
+    /// Timestamp when the token was issued.
     pub issued_at: DateTime<Utc>,
+    /// Optional finding identifier this token is linked to.
     pub finding_id: Option<String>,
+    /// Name of the module that issued the token.
     pub module: String,
 }
 
 impl OobToken {
+    /// Creates a new OOB token for the given module and optional finding.
     pub fn new(module: &str, finding_id: Option<String>) -> Self {
         Self {
             value: Uuid::now_v7(),
@@ -29,10 +36,12 @@ impl OobToken {
         }
     }
 
+    /// Returns the callback URL for this token on the given base URL.
     pub fn callback_url(&self, base: &Url) -> Result<Url, url::ParseError> {
         base.join(&format!("interaction/{}", self.value))
     }
 
+    /// Returns the DNS callback subdomain for this token.
     pub fn callback_domain(&self, base_domain: &str) -> String {
         format!("{}.{}", self.value, base_domain)
     }
@@ -41,18 +50,25 @@ impl OobToken {
 /// An interaction received by the OOB server.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct OobInteraction {
+    /// Token that was triggered.
     pub token: Uuid,
+    /// Type of interaction (e.g., `dns`, `http`).
     pub interaction_type: String,
+    /// Remote address that triggered the callback.
     pub remote_addr: String,
+    /// Timestamp of the interaction.
     pub timestamp: DateTime<Utc>,
+    /// Additional detail about the interaction.
     pub detail: String,
 }
 
 /// OOB server error.
 #[derive(Debug, Error)]
 pub enum OobError {
+    /// The requested token does not exist.
     #[error("Token not found: {0}")]
     TokenNotFound(Uuid),
+    /// The internal lock was poisoned.
     #[error("Lock poisoned")]
     LockPoisoned,
 }
@@ -65,6 +81,7 @@ pub struct OobTracker {
 }
 
 impl OobTracker {
+    /// Creates a new shared OOB tracker.
     pub fn new() -> Arc<Self> {
         Arc::new(Self::default())
     }

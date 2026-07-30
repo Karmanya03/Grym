@@ -97,13 +97,13 @@ pub fn to_markdown(document: &ReportDocument) -> String {
         .count();
 
     out.push_str("## Executive Summary\n\n");
-    out.push_str(&format!("| Severity | Count |\n|----------|------:|\n"));
+    out.push_str("| Severity | Count |\n|----------|------:|\n");
     out.push_str(&format!("| Critical | {} |\n", critical));
     out.push_str(&format!("| High     | {} |\n", high));
     out.push_str(&format!("| Medium   | {} |\n", medium));
     out.push_str(&format!("| Low      | {} |\n", low));
     out.push_str(&format!("| Info     | {} |\n", info));
-    out.push_str("\n");
+    out.push('\n');
 
     // Findings
     out.push_str("## Findings\n\n");
