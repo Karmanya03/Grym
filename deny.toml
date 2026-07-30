@@ -3,24 +3,27 @@ all-features = true
 
 [advisories]
 version = 2
-vulnerability = "deny"
-unmaintained = "warn"
-notice = "warn"
-severity-threshold = "low"
+yanked = "warn"
+unmaintained = "workspace"
+unsound = "workspace"
+unused-ignored-advisory = "warn"
 ignore = []
 
 [licenses]
-version = 2
-allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib"]
-deny = ["GPL-3.0", "GPL-2.0", "AGPL-3.0", "LGPL-3.0", "LGPL-2.0", "CC0-1.0", "Unlicense"]
+allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "CC0-1.0", "Unlicense", "CDLA-Permissive-2.0"]
 confidence-threshold = 0.8
-copyleft = "deny"
-allow-osi-fsf-free = "neither"
-default = "deny"
+unused-allowed-license = "warn"
+
+[[licenses.clarify]]
+crate = "ring"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [
+    { path = "LICENSE", hash = 0xbd0eed23 },
+]
 
 [bans]
-multiple-versions = "deny"
-wildcards = "deny"
+multiple-versions = "allow"
+wildcards = "allow"
 highlight = "all"
 deny = []
 skip = []

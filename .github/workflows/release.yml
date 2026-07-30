@@ -96,7 +96,7 @@ jobs:
           try {
             foreach ($bin in @('grym', 'grym-tui')) {
               $asset = "${bin}-${version}-${{ matrix.target }}.zip"
-              Compress-Archive -Path "${bin}.exe" -DestinationPath "../../${distDir}/${asset}" -Force
+              Compress-Archive -Path "${bin}.exe" -DestinationPath "../../../${distDir}/${asset}" -Force
               Write-Host "Packaged ${distDir}/${asset}"
             }
           } finally {
