@@ -13,8 +13,11 @@ use axum::{
     response::IntoResponse,
     routing::{get, post, put},
 };
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, FixedOffset, Utc};
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use tokio::sync::RwLock;
 use tower_http::{
     cors::{Any, CorsLayer},
@@ -423,20 +426,49 @@ async fn auth_middleware(
 }
 
 fn validate_jwt(token: &str, secret: &str) -> Result<serde_json::Value, ()> {
-    use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
-    let mut validation = Validation::new(Algorithm::HS256);
-    validation.validate_exp = true;
-    let mut set = std::collections::HashSet::new();
-    set.insert("exp".into());
-    validation.required_spec_claims = set;
-    match decode::<serde_json::Value>(
-        token,
-        &DecodingKey::from_secret(secret.as_bytes()),
-        &validation,
-    ) {
-        Ok(data) => Ok(data.claims),
-        Err(_) => Err(()),
+    type HmacSha256 = Hmac<Sha256>;
+
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() != 3 {
+        return Err(());
     }
+
+    // Decode and inspect the header to enforce HS256 only.
+    let header_bytes = URL_SAFE_NO_PAD.decode(parts[0]).map_err(|_| ())?;
+    let header: serde_json::Value = serde_json::from_slice(&header_bytes).map_err(|_| ())?;
+    let alg = header.get("alg").and_then(|v| v.as_str()).ok_or(())?;
+    if alg != "HS256" {
+        return Err(());
+    }
+
+    // Verify the signature over "base64url(header).base64url(payload)".
+    let message = format!("{}.{}", parts[0], parts[1]);
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).map_err(|_| ())?;
+    mac.update(message.as_bytes());
+    let expected = mac.finalize().into_bytes();
+
+    let signature = URL_SAFE_NO_PAD.decode(parts[2]).map_err(|_| ())?;
+    if signature.len() != expected.len() {
+        return Err(());
+    }
+    let mut diff: u8 = 0;
+    for (a, b) in expected.as_slice().iter().zip(signature.iter()) {
+        diff |= a ^ b;
+    }
+    if diff != 0 {
+        return Err(());
+    }
+
+    // Decode the payload and require a valid `exp` claim.
+    let payload_bytes = URL_SAFE_NO_PAD.decode(parts[1]).map_err(|_| ())?;
+    let payload: serde_json::Value = serde_json::from_slice(&payload_bytes).map_err(|_| ())?;
+    let now = Utc::now().timestamp();
+    let exp = payload.get("exp").and_then(|v| v.as_i64()).ok_or(())?;
+    if exp < now {
+        return Err(());
+    }
+
+    Ok(payload)
 }
 
 async fn rate_limit_middleware(
