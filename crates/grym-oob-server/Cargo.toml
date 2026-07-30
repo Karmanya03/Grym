@@ -1,0 +1,19 @@
+[package]
+name = "grym-oob-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Out-of-band OOB/DNS interaction server for blind vulnerability confirmation."
+
+[lints]
+workspace = true
+
+[dependencies]
+axum.workspace = true
+chrono.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+url.workspace = true
+uuid.workspace = true

@@ -1,0 +1,22 @@
+[package]
+name = "grym-recon-passive"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Passive reconnaissance engine: DNS, CT logs, subdomain enumeration, favicon hashing, JS analysis."
+
+[lints]
+workspace = true
+
+[dependencies]
+regex.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha1.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+url.workspace = true
+
+grym-core = { path = "../grym-core" }

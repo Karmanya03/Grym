@@ -1,0 +1,7 @@
+{
+  "version": "19.1",
+  "domain": "enterprise-attack",
+  "notes": "Stealth (TA0005) is distinct from Defense Impairment (TA0112); only the former informs scheduler profiles.",
+  "techniques": ["T1046", "T1059", "T1110", "T1133", "T1190", "T1195", "T1195.002", "T1499", "T1552", "T1556", "T1592"]
+}
+

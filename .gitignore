@@ -1,0 +1,40 @@
+# Rust build artifacts
+/target/
+
+# IDE / editor dirs
+/.vscode/
+/.idea/
+*.swp
+*.swo
+*~
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Rust backups
+*.rs.bk
+
+# Debug symbols
+*.pdb
+
+# Logs and runtime data
+*.log
+/data/
+/reports/
+/audit/
+
+# Secrets / env overrides
+.env
+.env.*
+!/.env.example
+
+# AI assistant / project plans (internal, not needed to build/use)
+AGENTS.md
+/.plan/
+/.plans/
+
+# Editor core dumps / tags
+rusty-tags.*
+tags

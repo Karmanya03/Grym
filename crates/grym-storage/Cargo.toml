@@ -1,0 +1,15 @@
+[package]
+name = "grym-storage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Finding-store abstraction for GRYM."
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
+grym-core = { path = "../grym-core" }
+

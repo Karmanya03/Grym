@@ -1,0 +1,38 @@
+[package]
+name = "grym-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Command-line interface for GRYM security assessment toolkit."
+
+[[bin]]
+name = "grym"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+tokio.workspace = true
+tower-http = { version = "0.6", features = ["cors"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+grym-core = { path = "../grym-core" }
+grym-recon-passive = { path = "../grym-recon-passive" }
+grym-recon-active = { path = "../grym-recon-active" }
+grym-web-scanner = { path = "../grym-web-scanner" }
+grym-cve-intel = { path = "../grym-cve-intel" }
+grym-report = { path = "../grym-report" }
+grym-storage = { path = "../grym-storage" }
+grym-template-engine = { path = "../grym-template-engine" }
+grym-tui = { path = "../grym-tui" }

@@ -1,0 +1,18 @@
+[package]
+name = "grym-template-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Declarative safe detection-template parser and matcher for GRYM."
+
+[lints]
+workspace = true
+
+[dependencies]
+regex.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+grym-core = { path = "../grym-core" }
+

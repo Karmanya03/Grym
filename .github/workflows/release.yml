@@ -1,0 +1,162 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-binaries:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux (glibc)
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04-arm
+          # Linux (musl) — glibc-error-free static binaries
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-22.04
+            rustflags: -C target-feature=+crt-static
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-22.04-arm
+            rustflags: -C target-feature=+crt-static
+          # macOS
+          - target: x86_64-apple-darwin
+            os: macos-13
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          # Windows
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.94.0
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl tools
+        if: contains(matrix.target, 'musl')
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release binaries
+        shell: bash
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+        run: |
+          cargo build -p grym-cli -p grym-tui --release --target ${{ matrix.target }}
+
+      - name: Package binaries (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME}"
+          mkdir -p dist
+          for bin in grym grym-tui; do
+            asset="${bin}-${version}-${{ matrix.target }}.tar.gz"
+            tar -czf "dist/${asset}" -C "target/${{ matrix.target }}/release" "${bin}"
+            echo "Packaged dist/${asset}"
+          done
+
+      - name: Package binaries (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $version = $env:GITHUB_REF_NAME
+          $releaseDir = "target/${{ matrix.target }}/release"
+          $distDir = "dist"
+          New-Item -ItemType Directory -Path $distDir -Force | Out-Null
+          Push-Location $releaseDir
+          try {
+            foreach ($bin in @('grym', 'grym-tui')) {
+              $asset = "${bin}-${version}-${{ matrix.target }}.zip"
+              Compress-Archive -Path "${bin}.exe" -DestinationPath "../../${distDir}/${asset}" -Force
+              Write-Host "Packaged ${distDir}/${asset}"
+            }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  package-browser-extension:
+    name: Package browser extension
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Create extension archive
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME}"
+          mkdir -p dist
+          cd browser-ext
+          zip -r "../dist/grym-browser-ext-${version}.zip" .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-extension
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish release assets
+    needs:
+      - build-binaries
+      - package-browser-extension
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true

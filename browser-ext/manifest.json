@@ -1,0 +1,66 @@
+{
+  "manifest_version": 3,
+  "name": "Grym — Web Security Assessment",
+  "version": "0.1.0",
+  "description": "Scope-enforced security assessment toolkit. Passive & active scanning, CVE correlation, payload generation.",
+  "author": "GRYM contributors",
+  "homepage_url": "https://example.invalid/grym",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon.svg",
+    "48": "icons/icon.svg",
+    "128": "icons/icon.svg"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "webRequest",
+    "scripting",
+    "tabs",
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "Grym — Open assessment"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content/content-script.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "lib/*",
+        "dashboard/*",
+        "fonts/*"
+      ],
+      "matches": ["http://*/*", "https://*/*"]
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "grym@example.invalid",
+      "strict_min_version": "128.0"
+    },
+    "edge": {
+      "browser_action_next_to_address_bar": true
+    }
+  }
+}

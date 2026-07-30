@@ -1,0 +1,8 @@
+[alias]
+xtask = "run -p xtask --"
+lint = "clippy --workspace --all-targets --all-features -- -D warnings"
+check-all = "check --workspace --all-targets --all-features"
+
+[build]
+incremental = true
+

@@ -1,0 +1,22 @@
+name: Fixture integration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  startup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: docker compose -f tests/fixtures/docker-compose.yml up -d --wait
+      - run: docker compose -f tests/fixtures/docker-compose.yml ps
+      - if: always()
+        run: docker compose -f tests/fixtures/docker-compose.yml logs
+      - if: always()
+        run: docker compose -f tests/fixtures/docker-compose.yml down -v
+

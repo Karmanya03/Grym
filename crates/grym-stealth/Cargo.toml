@@ -1,0 +1,15 @@
+[package]
+name = "grym-stealth"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Conservative scheduling profile definitions for GRYM."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+grym-core = { path = "../grym-core" }
+

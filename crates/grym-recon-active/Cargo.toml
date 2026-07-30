@@ -1,0 +1,19 @@
+[package]
+name = "grym-recon-active"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Safe active reconnaissance: port scanning, vhost brute-force, web crawling, parameter discovery."
+
+[lints]
+workspace = true
+
+[dependencies]
+regex.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+url.workspace = true
+
+grym-core = { path = "../grym-core" }

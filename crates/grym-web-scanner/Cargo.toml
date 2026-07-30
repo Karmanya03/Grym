@@ -1,0 +1,26 @@
+[package]
+name = "grym-web-scanner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Web vulnerability scanner: SQLi, XSS, SSTI, JWT, CORS, SSRF, command injection, path traversal, open redirect, IDOR."
+
+[lints]
+workspace = true
+
+[dependencies]
+base64.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hmac.workspace = true
+regex.workspace = true
+
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+url.workspace = true
+urlencoding = "2.1"
+
+grym-core = { path = "../grym-core" }
+grym-template-engine = { path = "../grym-template-engine" }

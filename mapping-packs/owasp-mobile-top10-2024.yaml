@@ -1,0 +1,14 @@
+version: "2024.1"
+source: "OWASP Mobile Top 10 2024"
+categories:
+  - id: "M1:2024-Improper-Credential-Usage"
+  - id: "M2:2024-Inadequate-Supply-Chain-Security"
+  - id: "M3:2024-Insecure-Authentication-and-Authorization"
+  - id: "M4:2024-Insufficient-Input-and-Output-Validation"
+  - id: "M5:2024-Insecure-Communication"
+  - id: "M6:2024-Inadequate-Privacy-Controls"
+  - id: "M7:2024-Insufficient-Binary-Protections"
+  - id: "M8:2024-Security-Misconfiguration"
+  - id: "M9:2024-Insecure-Data-Storage"
+  - id: "M10:2024-Insufficient-Cryptography"
+

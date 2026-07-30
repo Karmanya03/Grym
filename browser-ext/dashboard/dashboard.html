@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grym — Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+  <div id="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <svg class="sidebar-logo" width="32" height="32" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="22" height="22" rx="6" stroke="currentColor" stroke-width="2"/>
+          <path d="M9 14l3 3 7-7" stroke="#0ea5e9" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="sidebar-text">
+          <h1 class="sidebar-title">Grym</h1>
+          <span class="sidebar-subtitle">Security Assessment</span>
+        </div>
+      </div>
+      <nav class="nav-list" id="navList">
+        <button class="nav-item active" data-tab="dashboard">
+          <span class="nav-icon">&#x1F6E1;&#xFE0F;</span>
+          <span class="nav-label">Dashboard</span>
+        </button>
+        <button class="nav-item" data-tab="scanner">
+          <span class="nav-icon">&#x1F50D;</span>
+          <span class="nav-label">Scanner</span>
+        </button>
+        <button class="nav-item" data-tab="findings">
+          <span class="nav-icon">&#x1F4CB;</span>
+          <span class="nav-label">Findings</span>
+        </button>
+        <button class="nav-item" data-tab="cve">
+          <span class="nav-icon">&#x1F4C3;</span>
+          <span class="nav-label">CVE DB</span>
+        </button>
+        <button class="nav-item" data-tab="exploit">
+          <span class="nav-icon">&#x1F4A3;</span>
+          <span class="nav-label">Exploit Gen</span>
+        </button>
+        <button class="nav-item" data-tab="predict">
+          <span class="nav-icon">&#x1F52E;</span>
+          <span class="nav-label">Predict</span>
+        </button>
+        <button class="nav-item" data-tab="targets">
+          <span class="nav-icon">&#x1F310;</span>
+          <span class="nav-label">Targets</span>
+        </button>
+        <button class="nav-item" data-tab="settings">
+          <span class="nav-icon">&#x2699;&#xFE0F;</span>
+          <span class="nav-label">Settings</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="conn-status" id="connStatus">
+          <span class="conn-dot" id="connDot"></span>
+          <span class="conn-label" id="connLabel">Disconnected</span>
+        </div>
+        <span class="sidebar-version">v0.1.0</span>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <div class="topbar-left">
+          <h2 class="topbar-title" id="pageTitle">Dashboard</h2>
+        </div>
+        <div class="topbar-center">
+          <div class="target-input-group">
+            <span class="target-icon">&#x1F310;</span>
+            <input type="text" class="target-input" id="targetInput" placeholder="https://example.com" spellcheck="false" />
+            <button class="btn btn-primary" id="startScanBtn">
+              <span class="btn-icon">&#x25B6;</span>
+              Start Scan
+            </button>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <button class="btn btn-icon" id="exportBtn" title="Export findings as JSON">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M9 2v10M5 8l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M2 14v2h14v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button class="btn btn-icon" id="clearBtn" title="Clear all findings">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M3 5h12M6 5V3a1 1 0 011-1h4a1 1 0 011 1v2M7 8v6M11 8v6M4.5 5l.8 10.4a1 1 0 001 .6h5.4a1 1 0 001-.6L13.5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <div class="tab-content active" id="tab-dashboard">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon stat-icon-total">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2l8 4v6c0 4-3.582 7-8 8-4.418-1-8-4-8-8V6l8-4z" stroke="currentColor" stroke-width="1.5"/>
+                </svg>
+              </div>
+              <div class="stat-body">
+                <span class="stat-value" id="statTotal">0</span>
+                <span class="stat-label">Total Findings</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon stat-icon-critical">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M12 7v5M12 16v.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="stat-body">
+                <span class="stat-value" id="statCritical">0</span>
+                <span class="stat-label">Critical</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon stat-icon-high">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 3v12M5 10l7 7 7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="stat-body">
+                <span class="stat-value" id="statHigh">0</span>
+                <span class="stat-label">High</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon stat-icon-medium">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 3v12M5 10l7 7 7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="stat-body">
+                <span class="stat-value" id="statMedium">0</span>
+                <span class="stat-label">Medium</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon stat-icon-low">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M8 12h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="stat-body">
+                <span class="stat-value" id="statLow">0</span>
+                <span class="stat-label">Low</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon stat-icon-info">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M12 11v5M12 8v.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="stat-body">
+                <span class="stat-value" id="statInfo">0</span>
+                <span class="stat-label">Info</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Recent Activity</h3>
+            </div>
+            <div class="card-body">
+              <div id="recentActivity">
+                <div class="empty-state">
+                  <span class="empty-icon">&#x1F50D;</span>
+                  <p class="empty-text">No scans performed yet</p>
+                  <p class="empty-sub">Run a scan to see results here</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Server Connection</h3>
+            </div>
+            <div class="card-body">
+              <div class="server-info">
+                <div class="server-row">
+                  <span class="server-label">Status</span>
+                  <span class="server-value" id="serverStatusText">Checking...</span>
+                </div>
+                <div class="server-row">
+                  <span class="server-label">Transport</span>
+                  <span class="server-value" id="serverTransport">-</span>
+                </div>
+                <div class="server-row">
+                  <span class="server-label">Endpoint</span>
+                  <span class="server-value" id="serverEndpoint">http://localhost:9378</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tab-scanner">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Scan Target</h3>
+            </div>
+            <div class="card-body">
+              <div class="target-form">
+                <label class="form-label" for="scanTargetInput">Target URL</label>
+                <div class="target-input-group scan-url-group">
+                  <input type="text" class="target-input" id="scanTargetInput" placeholder="https://example.com" spellcheck="false" />
+                  <button class="btn btn-primary" id="scanTargetBtn">
+                    <span class="btn-icon">&#x25B6;</span>
+                    Scan
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Scan Modules</h3>
+              <span class="card-badge" id="moduleCount">18 selected</span>
+            </div>
+            <div class="card-body">
+              <div class="modules-grid" id="modulesGrid">
+                <label class="module-pill active" data-module="sqli">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">SQL Injection</span>
+                </label>
+                <label class="module-pill active" data-module="xss">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">XSS</span>
+                </label>
+                <label class="module-pill active" data-module="ssti">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">SSTI</span>
+                </label>
+                <label class="module-pill active" data-module="ssrf">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">SSRF</span>
+                </label>
+                <label class="module-pill active" data-module="cmdi">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">Command Injection</span>
+                </label>
+                <label class="module-pill active" data-module="ptrav">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">Path Traversal</span>
+                </label>
+                <label class="module-pill active" data-module="cors">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">CORS</span>
+                </label>
+                <label class="module-pill active" data-module="jwt">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">JWT</span>
+                </label>
+                <label class="module-pill active" data-module="openredir">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">Open Redirect</span>
+                </label>
+                <label class="module-pill active" data-module="idor">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">IDOR</span>
+                </label>
+                <label class="module-pill active" data-module="waf">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">WAF Detection</span>
+                </label>
+                <label class="module-pill active" data-module="http_smuggle">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">HTTP Smuggling</span>
+                </label>
+                <label class="module-pill active" data-module="xxe">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">XXE</span>
+                </label>
+                <label class="module-pill active" data-module="tech_fp">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">Tech Fingerprint</span>
+                </label>
+                <label class="module-pill active" data-module="csrf">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">CSRF</span>
+                </label>
+                <label class="module-pill active" data-module="nosqli">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">NoSQL Injection</span>
+                </label>
+                <label class="module-pill active" data-module="graphql">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">GraphQL</span>
+                </label>
+                <label class="module-pill active" data-module="hhi">
+                  <input type="checkbox" class="module-check" checked />
+                  <span class="module-pill-text">Host Header Injection</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Scan Options</h3>
+            </div>
+            <div class="card-body">
+              <div class="scan-options">
+                <label class="option-row">
+                  <span class="option-label">Request Delay (ms)</span>
+                  <input type="number" class="option-input" id="optDelay" value="200" min="0" max="5000" step="50" />
+                </label>
+                <label class="option-row">
+                  <span class="option-label">Timeout (s)</span>
+                  <input type="number" class="option-input" id="optTimeout" value="10" min="1" max="120" step="1" />
+                </label>
+                <label class="option-row">
+                  <span class="option-label">Follow Redirects</span>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="optFollowRedirect" checked />
+                    <span class="toggle-track"></span>
+                  </label>
+                </label>
+                <label class="option-row">
+                  <span class="option-label">Passive Mode Only</span>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="optPassive" />
+                    <span class="toggle-track"></span>
+                  </label>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" id="progressCard" style="display:none">
+            <div class="card-header">
+              <h3 class="card-title">Scan Progress</h3>
+              <span class="card-badge" id="scanStatusText">Running</span>
+            </div>
+            <div class="card-body">
+              <div class="progress-bar-track">
+                <div class="progress-bar-fill" id="progressFill"></div>
+              </div>
+              <div class="progress-info">
+                <span id="progressPercent">0%</span>
+                <span id="progressModule">Initializing...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tab-findings">
+          <div class="findings-toolbar">
+            <div class="severity-filters" id="severityFilters">
+              <button class="filter-btn active" data-severity="all">All</button>
+              <button class="filter-btn" data-severity="critical" style="--filter-color:#ef4444">Critical</button>
+              <button class="filter-btn" data-severity="high" style="--filter-color:#f97316">High</button>
+              <button class="filter-btn" data-severity="medium" style="--filter-color:#eab308">Medium</button>
+              <button class="filter-btn" data-severity="low" style="--filter-color:#22c55e">Low</button>
+              <button class="filter-btn" data-severity="info" style="--filter-color:#6b7280">Info</button>
+            </div>
+            <div class="findings-count">
+              <span id="findingsTotal">0 findings</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-body findings-list" id="findingsList">
+              <div class="empty-state">
+                <span class="empty-icon">&#x1F4CB;</span>
+                <p class="empty-text">No findings yet</p>
+                <p class="empty-sub">Run a scan to discover vulnerabilities</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="pagination" id="pagination" style="display:none">
+            <button class="btn btn-ghost" id="prevPage" disabled>&#x2190; Previous</button>
+            <div class="page-info" id="pageInfo">Page 1 of 1</div>
+            <button class="btn btn-ghost" id="nextPage" disabled>Next &#x2192;</button>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tab-cve">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">CVE Database</h3>
+              <span class="card-badge" id="cveCount">0 entries</span>
+            </div>
+            <div class="card-body">
+              <div class="cve-toolbar">
+                <div class="target-input-group cve-search-group">
+                  <span class="target-icon">&#x1F50D;</span>
+                  <input type="text" class="target-input" id="cveSearchInput" placeholder="Search CVE-ID, component, or keyword" spellcheck="false" />
+                  <button class="btn btn-primary" id="cveSearchBtn">
+                    <span class="btn-icon">&#x25B6;</span>
+                    Search
+                  </button>
+                </div>
+                <button class="btn btn-ghost btn-sm" id="cveLoadAllBtn">Load All</button>
+              </div>
+              <div class="cve-list" id="cveList">
+                <div class="empty-state">
+                  <span class="empty-icon">&#x1F4C3;</span>
+                  <p class="empty-text">No CVE data loaded</p>
+                  <p class="empty-sub">Load the database or search for a CVE ID</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tab-exploit">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Exploit Generator</h3>
+            </div>
+            <div class="card-body">
+              <div class="exploit-form">
+                <div class="form-row">
+                  <label class="form-label" for="exploitCveId">CVE ID or Vulnerability</label>
+                  <input type="text" class="target-input" id="exploitCveId" placeholder="CVE-2021-44228 or command injection" spellcheck="false" />
+                </div>
+                <div class="form-row">
+                  <label class="form-label" for="exploitTarget">Target URL</label>
+                  <input type="text" class="target-input" id="exploitTarget" placeholder="http://target:8080" spellcheck="false" />
+                </div>
+                <div class="form-row form-row-2col">
+                  <div>
+                    <label class="form-label" for="exploitFormat">Format</label>
+                    <select class="target-input" id="exploitFormat">
+                      <option value="python">Python</option>
+                      <option value="curl">curl</option>
+                      <option value="bash">Bash</option>
+                      <option value="nuclei">Nuclei YAML</option>
+                      <option value="go">Go</option>
+                      <option value="rust">Rust</option>
+                      <option value="powershell">PowerShell</option>
+                      <option value="nodejs">Node.js</option>
+                      <option value="java">Java</option>
+                      <option value="php">PHP</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="form-label" for="exploitCallback">Callback IP:Port</label>
+                    <input type="text" class="target-input" id="exploitCallback" placeholder="10.0.0.1:4444" spellcheck="false" />
+                  </div>
+                </div>
+                <div class="form-actions">
+                  <button class="btn btn-primary" id="exploitGenerateBtn">
+                    <span class="btn-icon">&#x2699;</span>
+                    Generate Exploit
+                  </button>
+                  <button class="btn btn-ghost btn-sm" id="exploitVariantsBtn">Generate Variants</button>
+                </div>
+              </div>
+              <div class="exploit-output" id="exploitOutput">
+                <div class="empty-state">
+                  <span class="empty-icon">&#x1F4A3;</span>
+                  <p class="empty-text">Generated exploit will appear here</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tab-predict">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Zero-Day Prediction</h3>
+            </div>
+            <div class="card-body">
+              <div class="exploit-form">
+                <div class="form-row form-row-2col">
+                  <div>
+                    <label class="form-label" for="predictComponent">Component</label>
+                    <input type="text" class="target-input" id="predictComponent" placeholder="Apache Struts" spellcheck="false" />
+                  </div>
+                  <div>
+                    <label class="form-label" for="predictVersion">Version</label>
+                    <input type="text" class="target-input" id="predictVersion" placeholder="2.5.10" spellcheck="false" />
+                  </div>
+                </div>
+                <div class="form-actions">
+                  <button class="btn btn-primary" id="predictBtn">
+                    <span class="btn-icon">&#x1F52E;</span>
+                    Predict Risk
+                  </button>
+                </div>
+              </div>
+              <div class="predict-output" id="predictOutput">
+                <div class="empty-state">
+                  <span class="empty-icon">&#x1F52E;</span>
+                  <p class="empty-text">Prediction results will appear here</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tab-targets">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Recent Targets</h3>
+            </div>
+            <div class="card-body">
+              <div id="targetsList">
+                <div class="empty-state">
+                  <span class="empty-icon">&#x1F310;</span>
+                  <p class="empty-text">No targets scanned yet</p>
+                  <p class="empty-sub">Targets you scan will appear here</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tab-settings">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">General</h3>
+            </div>
+            <div class="card-body">
+              <div class="settings-group">
+                <label class="option-row">
+                  <span class="option-label">
+                    <span class="option-title">Server URL</span>
+                    <span class="option-desc">Grym assessment server endpoint</span>
+                  </span>
+                  <input type="text" class="option-input option-input-wide" id="settingsServerUrl" value="http://localhost:9378" spellcheck="false" />
+                </label>
+                <label class="option-row">
+                  <span class="option-label">
+                    <span class="option-title">Auto-connect to server</span>
+                    <span class="option-desc">Automatically attempt to connect on startup</span>
+                  </span>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="settingsAutoConnect" checked />
+                    <span class="toggle-track"></span>
+                  </label>
+                </label>
+                <label class="option-row">
+                  <span class="option-label">
+                    <span class="option-title">Notifications</span>
+                    <span class="option-desc">Show desktop notifications on scan complete</span>
+                  </span>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="settingsNotifications" checked />
+                    <span class="toggle-track"></span>
+                  </label>
+                </label>
+                <label class="option-row">
+                  <span class="option-label">
+                    <span class="option-title">Auto-analyze pages</span>
+                    <span class="option-desc">Run passive analysis on page load</span>
+                  </span>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="settingsAutoAnalyze" checked />
+                    <span class="toggle-track"></span>
+                  </label>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Data Management</h3>
+            </div>
+            <div class="card-body">
+              <div class="settings-actions">
+                <button class="btn btn-ghost" id="settingsExportBtn">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 2v8M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 12v2h12v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  Export Findings
+                </button>
+                <button class="btn btn-danger" id="settingsClearBtn">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M2 4h12M5 4V2a1 1 0 011-1h4a1 1 0 011 1v2M6 7v6M10 7v6M3.5 4l.7 9.3a1 1 0 001 .7h5.6a1 1 0 001-.7L12.5 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  Clear All Findings
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">Clear All Findings</h3>
+      </div>
+      <div class="modal-body">
+        <p>This will permanently remove all findings from the current session. This action cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" id="modalCancel">Cancel</button>
+        <button class="btn btn-danger" id="modalConfirm">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

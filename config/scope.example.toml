@@ -1,0 +1,33 @@
+# Copy this file for a real, explicitly authorized engagement. It is intentionally
+# non-runnable until you set the approved engagement window and attestation.
+format_version = 1
+
+[engagement]
+client = "Example Corp"
+engagement_id = "ENG-2026-014"
+authorized_start = "2026-08-01T00:00:00+05:30"
+authorized_end = "2026-08-15T23:59:59+05:30"
+emergency_contact = "security@example.com"
+
+[targets]
+allow = ["*.example.com", "203.0.113.0/24"]
+deny = ["payments.example.com", "*/logout", "*/admin/delete-account"]
+
+[limits]
+max_requests_per_second_global = 20
+max_requests_per_second_per_host = 3
+max_response_bytes = 2097152
+
+[technique]
+max_tier = 1
+deepness = "standard"
+
+[authorization]
+# Must be true and paired with the typed session confirmation to run Tier 1+ work.
+authorization_attested = false
+
+[safety]
+max_redirects = 5
+block_rate_threshold_percent = 60
+server_error_threshold = 5
+

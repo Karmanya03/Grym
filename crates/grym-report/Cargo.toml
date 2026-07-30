@@ -1,0 +1,17 @@
+[package]
+name = "grym-report"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Evidence-aware JSON, Markdown, and HTML report exports for GRYM."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+grym-core = { path = "../grym-core" }
+

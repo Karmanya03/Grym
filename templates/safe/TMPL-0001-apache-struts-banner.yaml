@@ -1,0 +1,16 @@
+id: TMPL-0001
+name: "Outdated Apache Struts version banner"
+category: "A03:2025-Software-Supply-Chain-Failures"
+cwe: [1104]
+attack_technique: ["T1190"]
+severity: high
+confidence_on_match: possible
+matchers:
+  - type: header
+    part: server
+    regex: "Apache-Struts/2\\.(0|1|2|3|4|5)\\."
+cve_refs: ["CVE-2017-5638"]
+references:
+  - "https://nvd.nist.gov/vuln/detail/CVE-2017-5638"
+remediation: "Upgrade to a patched Struts version following the vendor advisory."
+

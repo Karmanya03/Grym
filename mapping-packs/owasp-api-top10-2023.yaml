@@ -1,0 +1,14 @@
+version: "2023.1"
+source: "OWASP API Security Top 10 2023"
+categories:
+  - id: "API1:2023-Broken-Object-Level-Authorization"
+  - id: "API2:2023-Broken-Authentication"
+  - id: "API3:2023-Broken-Object-Property-Level-Authorization"
+  - id: "API4:2023-Unrestricted-Resource-Consumption"
+  - id: "API5:2023-Broken-Function-Level-Authorization"
+  - id: "API6:2023-Unrestricted-Access-to-Sensitive-Business-Flows"
+  - id: "API7:2023-Server-Side-Request-Forgery"
+  - id: "API8:2023-Security-Misconfiguration"
+  - id: "API9:2023-Improper-Inventory-Management"
+  - id: "API10:2023-Unsafe-Consumption-of-APIs"
+

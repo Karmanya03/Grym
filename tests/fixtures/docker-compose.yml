@@ -1,0 +1,23 @@
+# Intentionally vulnerable training fixtures only. Never point GRYM at an
+# internet target without a signed authorization and an approved scope file.
+services:
+  juice-shop:
+    image: bkimminich/juice-shop:latest
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  dvwa:
+    image: vulnerables/web-dvwa:latest
+    ports:
+      - "4280:80"
+
+  webgoat:
+    image: webgoat/webgoat:latest
+    ports:
+      - "8080:8080"
+

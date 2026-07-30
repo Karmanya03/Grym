@@ -1,0 +1,32 @@
+version: "2025.1"
+source: "OWASP Top 10 2025"
+categories:
+  - id: "A01:2025-Broken-Access-Control"
+    cwe: [22, 284, 285, 639, 918]
+    attack: ["T1190", "T1133"]
+  - id: "A02:2025-Security-Misconfiguration"
+    cwe: [16, 209, 538]
+    attack: ["T1592", "T1046"]
+  - id: "A03:2025-Software-Supply-Chain-Failures"
+    cwe: [494, 829, 1104]
+    attack: ["T1195"]
+  - id: "A04:2025-Cryptographic-Failures"
+    cwe: [321, 327, 330]
+    attack: ["T1552"]
+  - id: "A05:2025-Injection"
+    cwe: [78, 79, 89, 90, 611]
+    attack: ["T1190", "T1059"]
+  - id: "A06:2025-Insecure-Design"
+    cwe: [362, 840, 841]
+  - id: "A07:2025-Authentication-Failures"
+    cwe: [287, 307, 613]
+    attack: ["T1110", "T1556"]
+  - id: "A08:2025-Software-or-Data-Integrity-Failures"
+    cwe: [345, 502]
+    attack: ["T1195.002"]
+  - id: "A09:2025-Security-Logging-and-Alerting-Failures"
+    cwe: [117, 778]
+  - id: "A10:2025-Mishandling-of-Exceptional-Conditions"
+    cwe: [248, 390, 755]
+    attack: ["T1499"]
+

@@ -1,0 +1,38 @@
+[package]
+name = "grym-tui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Advanced TUI dashboard for GRYM penetration testing toolkit."
+
+[[bin]]
+name = "grym-tui"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+chrono.workspace = true
+crossterm.workspace = true
+ratatui.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["fs", "macros", "rt-multi-thread", "sync", "time", "io-std"] }
+tokio-stream.workspace = true
+tracing-subscriber.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+grym-core = { path = "../grym-core" }
+grym-recon-passive = { path = "../grym-recon-passive" }
+grym-recon-active = { path = "../grym-recon-active" }
+grym-template-engine = { path = "../grym-template-engine" }
+grym-web-scanner = { path = "../grym-web-scanner" }
+grym-storage = { path = "../grym-storage" }
+grym-report = { path = "../grym-report" }
+grym-stealth = { path = "../grym-stealth" }
+grym-cve-intel = { path = "../grym-cve-intel" }
