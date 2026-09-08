@@ -10,6 +10,11 @@ on:
 permissions:
   contents: write
 
+# Cancel any in-flight release build when a new tag is pushed.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -17,6 +22,8 @@ jobs:
   build-binaries:
     name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
+    # Fail fast instead of queueing for 24h when a runner is unavailable.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -33,11 +40,12 @@ jobs:
           - target: aarch64-unknown-linux-musl
             os: ubuntu-22.04-arm
             rustflags: -C target-feature=+crt-static
-          # macOS
+          # macOS — macos-13 (Intel) runners were retired by GitHub;
+          # both Darwin targets cross-compile from arm64 macOS runners.
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-15
           - target: aarch64-apple-darwin
-            os: macos-latest
+            os: macos-15
           # Windows
           - target: x86_64-pc-windows-msvc
             os: windows-latest
@@ -113,6 +121,7 @@ jobs:
   package-browser-extension:
     name: Package browser extension
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -140,6 +149,7 @@ jobs:
       - build-binaries
       - package-browser-extension
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
