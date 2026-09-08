@@ -224,6 +224,8 @@ struct AppState {
     config: ServeConfig,
     rate_limiter: RateLimiterInner,
     settings: RwLock<grym_core::settings::GrymSettings>,
+    /// Methodology checklist with per-session step progress.
+    checklist: RwLock<grym_web_scanner::checklist::Checklist>,
 }
 
 // ── Handler helpers ───────────────────────────────────────────────────────
@@ -655,6 +657,112 @@ async fn cve_db_handler() -> Json<Vec<grym_web_scanner::cve_db::CveEntry>> {
     Json(cve_db::get_cve_database())
 }
 
+// ── Playbook handlers ───────────────────────────────────────────────────
+
+async fn playbook_payloads_handler() -> Json<Vec<grym_web_scanner::playbook::PayloadSet>> {
+    Json(grym_web_scanner::playbook::payload_sets())
+}
+
+async fn playbook_payload_set_handler(
+    axum::extract::Path(set_id): axum::extract::Path<String>,
+) -> Result<Json<grym_web_scanner::playbook::PayloadSet>, (StatusCode, Json<serde_json::Value>)> {
+    grym_web_scanner::playbook::payload_set(&set_id)
+        .map(Json)
+        .ok_or_else(|| error_response(StatusCode::NOT_FOUND, "payload set not found"))
+}
+
+async fn playbook_techniques_handler() -> Json<Vec<grym_web_scanner::playbook::Technique>> {
+    Json(grym_web_scanner::playbook::techniques())
+}
+
+async fn playbook_technique_handler(
+    axum::extract::Path(tech_id): axum::extract::Path<String>,
+) -> Result<Json<grym_web_scanner::playbook::Technique>, (StatusCode, Json<serde_json::Value>)> {
+    grym_web_scanner::playbook::technique(&tech_id)
+        .map(Json)
+        .ok_or_else(|| error_response(StatusCode::NOT_FOUND, "technique not found"))
+}
+
+async fn playbook_search_handler(
+    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
+) -> Result<Json<grym_web_scanner::playbook::SearchResult>, (StatusCode, Json<serde_json::Value>)> {
+    let query = params
+        .get("q")
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            error_response(StatusCode::BAD_REQUEST, "query parameter 'q' is required")
+        })?;
+    Ok(Json(grym_web_scanner::playbook::search(&query)))
+}
+
+async fn playbook_checklist_handler(
+    State(state): State<Arc<AppState>>,
+) -> Json<grym_web_scanner::checklist::Checklist> {
+    Json(state.checklist.read().await.clone())
+}
+
+#[derive(Deserialize)]
+struct ChecklistToggleRequest {
+    phase_id: String,
+    step_id: String,
+    checked: bool,
+}
+
+async fn playbook_checklist_toggle_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<ChecklistToggleRequest>,
+) -> Result<Json<grym_web_scanner::checklist::Checklist>, (StatusCode, Json<serde_json::Value>)> {
+    let mut checklist = state.checklist.write().await;
+    if !checklist.set_checked(&req.phase_id, &req.step_id, req.checked) {
+        return Err(error_response(
+            StatusCode::NOT_FOUND,
+            "phase_id/step_id combination not found",
+        ));
+    }
+    Ok(Json(checklist.clone()))
+}
+
+#[derive(Deserialize)]
+struct PlanRequest {
+    target: String,
+    #[serde(default)]
+    technologies: Vec<String>,
+    #[serde(default)]
+    authenticated: bool,
+    #[serde(default)]
+    engagement_id: String,
+    /// Override tier/deepness; defaults come from loaded settings when omitted.
+    max_tier: Option<u8>,
+    deepness: Option<String>,
+}
+
+async fn playbook_plan_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<PlanRequest>,
+) -> Result<Json<grym_web_scanner::plan::EngagementPlan>, (StatusCode, Json<serde_json::Value>)> {
+    if req.target.trim().is_empty() {
+        return Err(error_response(
+            StatusCode::BAD_REQUEST,
+            "target is required",
+        ));
+    }
+    // Tier/deepness defaults from the loaded scope settings.
+    let scope_settings = state.settings.read().await.scope.clone();
+    let limits = grym_web_scanner::plan::PlanLimits {
+        max_tier: req.max_tier.unwrap_or(scope_settings.max_tier).min(4),
+        deepness: req.deepness.unwrap_or(scope_settings.deepness),
+    };
+    let profile = grym_web_scanner::plan::TargetProfile {
+        base_url: req.target,
+        technologies: req.technologies,
+        authenticated: req.authenticated,
+        notes: Vec::new(),
+        engagement_id: req.engagement_id,
+    };
+    Ok(Json(grym_web_scanner::plan::generate(&profile, &limits)))
+}
+
 async fn cve_lookup_by_id_handler(
     axum::extract::Path(cve_id): axum::extract::Path<String>,
 ) -> Result<Json<grym_web_scanner::cve_db::CveEntry>, (StatusCode, Json<serde_json::Value>)> {
@@ -1005,6 +1113,7 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
         config: config.clone(),
         rate_limiter,
         settings: RwLock::new(grym_settings),
+        checklist: RwLock::new(grym_web_scanner::checklist::standard_web_checklist()),
     });
 
     let cors = if config.allowed_origins.is_empty() {
@@ -1043,6 +1152,24 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
         .route("/predict", post(predict_handler))
         .route("/analyze-body", post(analyze_body_handler))
         .route("/state", get(state_handler))
+        // Playbook: payload library, techniques, checklists, plans
+        .route("/playbook/payloads", get(playbook_payloads_handler))
+        .route(
+            "/playbook/payloads/{set_id}",
+            get(playbook_payload_set_handler),
+        )
+        .route("/playbook/techniques", get(playbook_techniques_handler))
+        .route(
+            "/playbook/techniques/{tech_id}",
+            get(playbook_technique_handler),
+        )
+        .route("/playbook/search", get(playbook_search_handler))
+        .route("/playbook/checklist", get(playbook_checklist_handler))
+        .route(
+            "/playbook/checklist/toggle",
+            post(playbook_checklist_toggle_handler),
+        )
+        .route("/playbook/plan", post(playbook_plan_handler))
         // Settings endpoints
         .route("/settings", get(get_settings_handler))
         .route("/settings/scope", put(update_scope_handler))

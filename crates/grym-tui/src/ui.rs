@@ -38,10 +38,12 @@ fn render_header(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
             Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         ));
 
-    let tabs = Tabs::new(vec![
+    let tabs = Tabs::new([
         Tab::Dashboard.label(),
         Tab::Scanner.label(),
         Tab::Findings.label(),
+        Tab::Payloads.label(),
+        Tab::Plan.label(),
         Tab::Logs.label(),
         Tab::Config.label(),
     ])
@@ -49,8 +51,10 @@ fn render_header(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
         Tab::Dashboard => 0,
         Tab::Scanner => 1,
         Tab::Findings => 2,
-        Tab::Logs => 3,
-        Tab::Config => 4,
+        Tab::Payloads => 3,
+        Tab::Plan => 4,
+        Tab::Logs => 5,
+        Tab::Config => 6,
     })
     .block(title_block)
     .highlight_style(Style::new().fg(Color::Yellow).add_modifier(Modifier::BOLD))
@@ -61,7 +65,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
 
 fn render_footer(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
     let hints = Line::from(vec![
-        Span::styled(" [1-5] Tabs ", Style::new().fg(Color::Cyan)),
+        Span::styled(" [1-7] Tabs ", Style::new().fg(Color::Cyan)),
         Span::styled(" [↑↓] Navigate ", Style::new().fg(Color::Green)),
         Span::styled(" [Tab] Next Tab ", Style::new().fg(Color::Yellow)),
         Span::styled(" [🖱] Mouse ", Style::new().fg(Color::Blue)),
@@ -94,6 +98,8 @@ fn render_body(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
         Tab::Dashboard => render_dashboard(frame, area, app),
         Tab::Scanner => render_scanner(frame, area, app),
         Tab::Findings => render_findings(frame, area, app),
+        Tab::Payloads => render_payloads(frame, area, app),
+        Tab::Plan => render_plan(frame, area, app),
         Tab::Logs => render_logs(frame, area, app),
         Tab::Config => render_config(frame, area, app),
     }
@@ -414,8 +420,196 @@ fn render_findings(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
     }
 }
 
+fn render_payloads(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
+    let chunks = Layout::horizontal([Constraint::Percentage(32), Constraint::Percentage(68)])
+        .areas::<2>(area);
+
+    let [list_area, detail_area] = chunks;
+    app.payload_set_list_area = Some(list_area);
+
+    // Left: payload set list.
+    let set_items: Vec<ListItem> = app
+        .payload_sets
+        .iter()
+        .enumerate()
+        .map(|(i, set)| {
+            ListItem::new(Line::from(vec![
+                Span::styled(format!("{:>2} ", i + 1), Style::new().fg(Color::DarkGray)),
+                Span::styled(
+                    set.id.clone(),
+                    Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!(" ({})", set.payloads.len()),
+                    Style::new().fg(Color::DarkGray),
+                ),
+            ]))
+        })
+        .collect();
+
+    let set_list = List::new(set_items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Payload Sets ")
+                .border_style(Style::new().fg(Color::Cyan)),
+        )
+        .highlight_style(
+            Style::new()
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        )
+        .highlight_symbol("> ");
+
+    frame.render_stateful_widget(
+        set_list,
+        list_area,
+        &mut ratatui::widgets::ListState::default().with_selected(Some(app.selected_payload_set)),
+    );
+
+    // Right: the selected set's payloads.
+    let detail_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::new().fg(Color::Yellow));
+
+    if let Some(set) = app.current_payload_set() {
+        let detail = detail_block.title(Span::styled(
+            format!(" {} ", set.title),
+            Style::new().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        ));
+
+        let mut lines: Vec<Line> = vec![
+            Line::from(Span::styled(
+                "When to use: ",
+                Style::new().fg(Color::DarkGray),
+            )),
+            Line::from(Span::styled(
+                set.when_to_use.clone(),
+                Style::new().fg(Color::White),
+            )),
+            Line::from(""),
+        ];
+
+        for payload in &set.payloads {
+            lines.push(Line::from(vec![
+                Span::styled(
+                    "▸ ",
+                    Style::new().fg(Color::Magenta).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    payload.value.clone(),
+                    Style::new().fg(Color::White).add_modifier(Modifier::BOLD),
+                ),
+            ]));
+            let mut meta = format!(
+                "   {} — difficulty {}/5",
+                payload.description, payload.difficulty
+            );
+            if !payload.tag.is_empty() {
+                meta = format!("{} [{}]", meta, payload.tag);
+            }
+            lines.push(Line::from(Span::styled(
+                meta,
+                Style::new().fg(Color::DarkGray),
+            )));
+        }
+
+        let paragraph = Paragraph::new(Text::from(lines))
+            .block(detail)
+            .wrap(Wrap { trim: false })
+            .scroll((app.payload_scroll, 0));
+        frame.render_widget(paragraph, detail_area);
+    } else {
+        let empty = Paragraph::new(Line::from(Span::styled(
+            "No payload set selected.",
+            Style::new().fg(Color::DarkGray),
+        )))
+        .block(detail_block.title(" Payloads "));
+        frame.render_widget(empty, detail_area);
+    }
+}
+
+fn render_plan(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
+    let plan = &app.plan;
+    let mut lines: Vec<Line> = Vec::new();
+
+    lines.push(Line::from(vec![
+        Span::styled("Target: ", Style::new().fg(Color::DarkGray)),
+        Span::styled(
+            plan.target.clone(),
+            Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+        ),
+    ]));
+    if !plan.engagement_id.is_empty() {
+        lines.push(Line::from(vec![
+            Span::styled("Engagement: ", Style::new().fg(Color::DarkGray)),
+            Span::styled(plan.engagement_id.clone(), Style::new().fg(Color::White)),
+        ]));
+    }
+    lines.push(Line::from(""));
+
+    for step in &plan.steps {
+        let weight_color = match step.weight {
+            4..=5 => Color::Red,
+            3 => Color::Yellow,
+            _ => Color::Green,
+        };
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("{:>2}. ", step.order),
+                Style::new().fg(Color::DarkGray),
+            ),
+            Span::styled(
+                step.action.clone(),
+                Style::new().fg(Color::White).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("  [{}/5]", step.weight),
+                Style::new().fg(weight_color),
+            ),
+        ]));
+        lines.push(Line::from(Span::styled(
+            format!("    {}", step.rationale),
+            Style::new().fg(Color::Gray),
+        )));
+    }
+
+    if !plan.suggested_payload_sets.is_empty() {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "Suggested payload sets (see Payloads tab):",
+            Style::new().fg(Color::Yellow),
+        )));
+        for id in &plan.suggested_payload_sets {
+            lines.push(Line::from(Span::styled(
+                format!("  • {}", id),
+                Style::new().fg(Color::Magenta),
+            )));
+        }
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!("Methodology checklist: {}", plan.checklist_id),
+        Style::new().fg(Color::DarkGray),
+    )));
+
+    let widget = Paragraph::new(Text::from(lines))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(Span::styled(
+                    " Engagement Plan ",
+                    Style::new().fg(Color::Green).add_modifier(Modifier::BOLD),
+                ))
+                .border_style(Style::new().fg(Color::Green)),
+        )
+        .wrap(Wrap { trim: false })
+        .scroll((app.plan_scroll, 0));
+    frame.render_widget(widget, area);
+}
+
 fn render_logs(frame: &mut Frame, area: Rect, app: &mut GrymTuiApp) {
-    app.logs_area = Some(area);
     if app.logs.is_empty() {
         let empty = Paragraph::new(Line::from(Span::styled(
             "No log entries yet.",
@@ -532,7 +726,8 @@ const HELP_CONTENT: &[&str] = &[
     "GRYM TUI — Help & Controls",
     "",
     "NAVIGATION CONTROLS",
-    "  [1] Dashboard  [2] Scanner  [3] Findings  [4] Logs  [5] Config",
+    "  [1] Dashboard  [2] Scanner  [3] Findings  [4] Payloads",
+    "  [5] Plan       [6] Logs      [7] Config",
     "  [Tab] / [Shift+Tab] — Next / previous tab",
     "  [←] / [→]           — Switch tabs (same as Tab/Shift+Tab)",
     "  [↑] / [↓] or [k] / [j] — Move selection up / down",
@@ -542,8 +737,9 @@ const HELP_CONTENT: &[&str] = &[
     "",
     "MOUSE CONTROLS",
     "  • Click a tab in the header bar to switch tabs instantly.",
+    "  • Click a payload set in the Payloads list to view its payloads.",
     "  • Click a finding in the Findings list to select it.",
-    "  • Scroll wheel (or trackpad) scrolls Logs and Findings lists.",
+    "  • Scroll wheel (or trackpad) scrolls Logs, Payloads, and Findings lists.",
     "  • Click the [h] Help button in the footer to open this help screen.",
     "  • Click anywhere inside the help screen, or the Close button, to close it.",
     "",
@@ -552,6 +748,10 @@ const HELP_CONTENT: &[&str] = &[
     "  • Scanner: review available modules. From the CLI use 'grym scan <target>'",
     "            or launch the web dashboard/API to start real scans.",
     "  • Findings: browse, select, and inspect every discovered issue.",
+    "  • Payloads: curated payload library with when-to-use guidance. Select a",
+    "            set on the left; copy payloads manually into your own tooling.",
+    "  • Plan: auto-generated engagement plan from your scope.toml settings —",
+    "            ordered steps, time weights, and suggested payload sets.",
     "  • Logs: real-time stream from all modules. Scroll with wheel/Page keys.",
     "  • Config: current technique tiers and deepness profiles.",
     "",
@@ -560,8 +760,12 @@ const HELP_CONTENT: &[&str] = &[
     "  2 Scanner   — Available modules: DNS enum, port scan, web crawler, tech",
     "              fingerprint, vulnerability scan, and CVE correlation.",
     "  3 Findings  — List + detail pane for all discovered vulnerabilities.",
-    "  4 Logs      — Live log stream from scanner, transport, and core modules.",
-    "  5 Config    — Technique tiers (Passive -> Active Validation) and safety",
+    "  4 Payloads  — Reference payload sets (SQLi, XSS, SSTI, NoSQLi, SSRF,",
+    "              XXE, traversal, redirect) with context and difficulty.",
+    "  5 Plan      — Engagement plan: ordered methodology steps sized to your",
+    "              scope tier/deepness, plus suggested payload sets.",
+    "  6 Logs      — Live log stream from scanner, transport, and core modules.",
+    "  7 Config    — Technique tiers (Passive -> Active Validation) and safety",
     "              limits (rate limits, redirect depth, block thresholds).",
     "",
     "SAFETY & SCOPE",

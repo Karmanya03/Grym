@@ -180,6 +180,28 @@ A Manifest V3 add-on that works in Chromium, Firefox, and Edge:
 - `grym serve` — start the local HTTP API for the extension and automation.
 - `grym-tui` — a keyboard and mouse-driven terminal interface with a built-in help overlay.
 
+### Manual pentest playbook (core feature)
+
+A built-in reference and methodology layer for hands-on testing — no network access, no separate mode, just first-class CLI commands, API endpoints, and TUI tabs:
+
+- **Payload library** — curated sets for SQLi (union/error/blind/time), XSS (reflected/stored/polyglot), SSTI, SSRF, XXE, path traversal, NoSQLi, open redirect, command injection, JWT, and more, each with when-to-use context, tags, and difficulty ratings.
+- **Technique references** — step-by-step walkthroughs (e.g. JWT alg-confusion, auth bypass, union enumeration) with the concept, ordered manual steps, success indicators, and related payload sets.
+- **Methodology checklist** — a phased web-app pentest methodology (recon → mapping → discovery → exploitation → post-exploit → reporting) you can render to markdown and track progress on.
+- **Engagement plan generator** — feeds your `scope.toml` (tier, deepness, engagement id) plus a target profile into an ordered, weighted step plan with suggested payload sets.
+
+```bash
+grym playbook payloads                     # list all payload sets
+grym playbook payloads sqli-union          # show one set
+grym playbook payloads --search polyglot  # keyword filter
+grym playbook techniques                   # list technique references
+grym playbook techniques jwt-alg-confusion # show one technique
+grym playbook search "ssrf cloud"          # search payloads + techniques
+grym playbook checklist                    # render methodology checklist
+grym playbook checklist --out plan.md      # write it to a file
+grym playbook plan -u http://target --tech php,mysql --authenticated \
+    --out engagement.md                    # generate an engagement plan
+```
+
 ### Reporting and storage
 
 - Structured findings with severity, confidence, evidence, and remediation.
@@ -336,6 +358,11 @@ grym scope validate <path>      # Validate a scope TOML/JSON file
 grym scope show <path>          # Print the effective policy
 grym serve                      # Start the local HTTP API
 grym serve --host 127.0.0.1 --port 9378 --scope ./scope.toml
+grym playbook payloads          # List payload sets (add an id for detail)
+grym playbook techniques        # List technique references
+grym playbook search <query>    # Search payloads and techniques
+grym playbook checklist         # Methodology checklist (--out writes md)
+grym playbook plan -u <url>     # Engagement plan (--tech --authenticated --out)
 ```
 
 ---
@@ -355,6 +382,14 @@ grym serve --host 127.0.0.1 --port 9378 --scope ./scope.toml
 | POST | `/exploit` | Generate a PoC/exploit from a CVE |
 | POST | `/predict` | Zero-day risk prediction |
 | POST | `/analyze-body` | Predict vulnerabilities from a response body |
+| GET | `/playbook/payloads` | Full payload library (all sets) |
+| GET | `/playbook/payloads/{id}` | One payload set |
+| GET | `/playbook/techniques` | All technique references |
+| GET | `/playbook/techniques/{id}` | One technique reference |
+| GET | `/playbook/search?q=` | Search payloads and techniques |
+| GET | `/playbook/checklist` | Methodology checklist with progress |
+| POST | `/playbook/checklist/check` | Mark a checklist step done/not done |
+| POST | `/playbook/plan` | Generate an engagement plan |
 | GET | `/state` | Server runtime state |
 
 See [`docs/EXTENSION_AND_SERVE.md`](docs/EXTENSION_AND_SERVE.md) for request/response schemas and extension wiring.

@@ -16,6 +16,8 @@ pub enum Tab {
     Dashboard,
     Scanner,
     Findings,
+    Payloads,
+    Plan,
     Logs,
     Config,
 }
@@ -26,11 +28,24 @@ impl Tab {
             Tab::Dashboard => " DASHBOARD ",
             Tab::Scanner => " SCANNER ",
             Tab::Findings => " FINDINGS ",
+            Tab::Payloads => " PAYLOADS ",
+            Tab::Plan => " PLAN ",
             Tab::Logs => " LOGS ",
             Tab::Config => " CONFIG ",
         }
     }
 }
+
+/// All tabs in display order.
+pub const TAB_ORDER: [Tab; 7] = [
+    Tab::Dashboard,
+    Tab::Scanner,
+    Tab::Findings,
+    Tab::Payloads,
+    Tab::Plan,
+    Tab::Logs,
+    Tab::Config,
+];
 
 #[derive(Clone, Debug, Default)]
 pub struct ScanMetrics {
@@ -80,9 +95,17 @@ pub struct GrymTuiApp {
     pub finding_store: MemoryFindingStore,
     pub show_help: bool,
     pub mouse_enabled: bool,
+    // Payloads tab state.
+    pub payload_sets: Vec<grym_web_scanner::playbook::PayloadSet>,
+    pub selected_payload_set: usize,
+    pub payload_scroll: u16,
+    // Plan tab state.
+    pub plan: grym_web_scanner::plan::EngagementPlan,
+    pub plan_scroll: u16,
     // Hit-areas populated by the renderer for mouse interaction.
     pub tab_area: Option<Rect>,
     pub findings_list_area: Option<Rect>,
+    pub payload_set_list_area: Option<Rect>,
     pub logs_area: Option<Rect>,
     pub help_close_area: Option<Rect>,
     pub footer_help_area: Option<Rect>,
@@ -112,12 +135,41 @@ impl GrymTuiApp {
             finding_store: store,
             show_help: false,
             mouse_enabled: true,
+            payload_sets: grym_web_scanner::playbook::payload_sets(),
+            selected_payload_set: 0,
+            payload_scroll: 0,
+            plan: Self::build_plan(),
+            plan_scroll: 0,
             tab_area: None,
             findings_list_area: None,
+            payload_set_list_area: None,
             logs_area: None,
             help_close_area: None,
             footer_help_area: None,
         }
+    }
+
+    /// Generate an engagement plan from the persisted settings scope.
+    fn build_plan() -> grym_web_scanner::plan::EngagementPlan {
+        let settings = grym_core::settings::GrymSettings::load();
+        let target = settings.scope.allow.first().cloned().unwrap_or_default();
+        let limits = grym_web_scanner::plan::PlanLimits {
+            max_tier: settings.scope.max_tier.min(4),
+            deepness: settings.scope.deepness.clone(),
+        };
+        let profile = grym_web_scanner::plan::TargetProfile {
+            base_url: target,
+            technologies: Vec::new(),
+            authenticated: settings.scope.authorization_attested,
+            notes: Vec::new(),
+            engagement_id: settings.scope.engagement_id.clone(),
+        };
+        grym_web_scanner::plan::generate(&profile, &limits)
+    }
+
+    /// The payload set currently selected in the Payloads tab.
+    pub fn current_payload_set(&self) -> Option<&grym_web_scanner::playbook::PayloadSet> {
+        self.payload_sets.get(self.selected_payload_set)
     }
 
     pub async fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> anyhow::Result<()>
@@ -175,28 +227,18 @@ impl GrymTuiApp {
             KeyCode::Char('1') => self.active_tab = Tab::Dashboard,
             KeyCode::Char('2') => self.active_tab = Tab::Scanner,
             KeyCode::Char('3') => self.active_tab = Tab::Findings,
-            KeyCode::Char('4') => self.active_tab = Tab::Logs,
-            KeyCode::Char('5') => self.active_tab = Tab::Config,
+            KeyCode::Char('4') => self.active_tab = Tab::Payloads,
+            KeyCode::Char('5') => self.active_tab = Tab::Plan,
+            KeyCode::Char('6') => self.active_tab = Tab::Logs,
+            KeyCode::Char('7') => self.active_tab = Tab::Config,
             KeyCode::Right | KeyCode::Tab => {
-                let tabs = &[
-                    Tab::Dashboard,
-                    Tab::Scanner,
-                    Tab::Findings,
-                    Tab::Logs,
-                    Tab::Config,
-                ];
+                let tabs = &TAB_ORDER;
                 if let Some(pos) = tabs.iter().position(|t| *t == self.active_tab) {
                     self.active_tab = tabs[(pos + 1) % tabs.len()];
                 }
             }
             KeyCode::Left | KeyCode::BackTab => {
-                let tabs = &[
-                    Tab::Dashboard,
-                    Tab::Scanner,
-                    Tab::Findings,
-                    Tab::Logs,
-                    Tab::Config,
-                ];
+                let tabs = &TAB_ORDER;
                 if let Some(pos) = tabs.iter().position(|t| *t == self.active_tab) {
                     self.active_tab = if pos == 0 {
                         tabs[tabs.len() - 1]
@@ -212,6 +254,9 @@ impl GrymTuiApp {
                 if self.active_tab == Tab::Findings {
                     self.selected_finding = self.selected_finding.map(|i| i.saturating_sub(1));
                 }
+                if self.active_tab == Tab::Payloads {
+                    self.selected_payload_set = self.selected_payload_set.saturating_sub(1);
+                }
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 if self.active_tab == Tab::Logs {
@@ -225,15 +270,31 @@ impl GrymTuiApp {
                             .min(self.findings.len().saturating_sub(1)),
                     );
                 }
+                if self.active_tab == Tab::Payloads {
+                    let max = self.payload_sets.len().saturating_sub(1);
+                    self.selected_payload_set = (self.selected_payload_set + 1).min(max);
+                }
             }
             KeyCode::PageUp => {
                 if self.active_tab == Tab::Logs {
                     self.log_scroll = self.log_scroll.saturating_sub(5);
                 }
+                if self.active_tab == Tab::Payloads {
+                    self.payload_scroll = self.payload_scroll.saturating_sub(10);
+                }
+                if self.active_tab == Tab::Plan {
+                    self.plan_scroll = self.plan_scroll.saturating_sub(10);
+                }
             }
             KeyCode::PageDown => {
                 if self.active_tab == Tab::Logs {
                     self.log_scroll = self.log_scroll.saturating_add(5);
+                }
+                if self.active_tab == Tab::Payloads {
+                    self.payload_scroll = self.payload_scroll.saturating_add(10);
+                }
+                if self.active_tab == Tab::Plan {
+                    self.plan_scroll = self.plan_scroll.saturating_add(10);
                 }
             }
             KeyCode::Enter => {
@@ -283,22 +344,29 @@ impl GrymTuiApp {
                 // Tab bar click.
                 if let Some(area) = self.tab_area {
                     if area.contains(ratatui::layout::Position { x, y }) {
-                        let tabs = [
-                            Tab::Dashboard,
-                            Tab::Scanner,
-                            Tab::Findings,
-                            Tab::Logs,
-                            Tab::Config,
-                        ];
                         // Approximate equal-width tab cells inside the border.
                         let inner_width = area.width.saturating_sub(2).max(1);
-                        let cell_width = inner_width / tabs.len() as u16;
+                        let cell_width = inner_width / TAB_ORDER.len() as u16;
                         let rel_x = x.saturating_sub(area.x + 1);
                         let idx = (rel_x / cell_width.max(1)) as usize;
-                        if idx < tabs.len() {
-                            self.active_tab = tabs[idx];
+                        if idx < TAB_ORDER.len() {
+                            self.active_tab = TAB_ORDER[idx];
                         }
                         return;
+                    }
+                }
+
+                // Payload set list click.
+                if self.active_tab == Tab::Payloads {
+                    if let Some(area) = self.payload_set_list_area {
+                        if area.contains(ratatui::layout::Position { x, y })
+                            && !self.payload_sets.is_empty()
+                        {
+                            let inner_y = y.saturating_sub(area.y + 1) as usize;
+                            let max = self.payload_sets.len() - 1;
+                            self.selected_payload_set = inner_y.min(max);
+                            return;
+                        }
                     }
                 }
 
@@ -342,6 +410,10 @@ impl GrymTuiApp {
                     self.log_scroll = self.log_scroll.saturating_sub(3);
                 } else if self.active_tab == Tab::Findings {
                     self.selected_finding = self.selected_finding.map(|i| i.saturating_sub(1));
+                } else if self.active_tab == Tab::Payloads {
+                    self.payload_scroll = self.payload_scroll.saturating_sub(3);
+                } else if self.active_tab == Tab::Plan {
+                    self.plan_scroll = self.plan_scroll.saturating_sub(3);
                 }
             }
             MouseEventKind::ScrollDown => {
@@ -354,6 +426,10 @@ impl GrymTuiApp {
                             .saturating_add(1)
                             .min(self.findings.len().saturating_sub(1)),
                     );
+                } else if self.active_tab == Tab::Payloads {
+                    self.payload_scroll = self.payload_scroll.saturating_add(3);
+                } else if self.active_tab == Tab::Plan {
+                    self.plan_scroll = self.plan_scroll.saturating_add(3);
                 }
             }
             _ => {}

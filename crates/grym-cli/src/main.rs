@@ -189,6 +189,11 @@ enum Command {
         #[command(subcommand)]
         command: SettingsCommand,
     },
+    /// Payload library, technique reference, checklists, and engagement plans.
+    Playbook {
+        #[command(subcommand)]
+        command: PlaybookCommand,
+    },
     /// Start the hardened API server for the browser extension.
     Serve {
         /// Host to bind to (default: 127.0.0.1)
@@ -317,6 +322,7 @@ async fn main() -> Result<()> {
         Command::Tui { scope: _ } => {
             grym_tui::run().await?;
         }
+        Command::Playbook { command } => handle_playbook(command).await?,
         Command::Settings { command } => handle_settings(command).await?,
         Command::Ai { prompt, reasoning } => {
             let tier = if reasoning {
@@ -442,6 +448,59 @@ enum ScopeCommand {
     Show {
         #[arg(default_value = "config/scope.toml")]
         path: PathBuf,
+    },
+}
+
+/// Payload library and technique reference commands.
+#[derive(Debug, Subcommand)]
+enum PlaybookCommand {
+    /// List all payload sets (or show one by id).
+    Payloads {
+        /// Specific payload set id to display.
+        id: Option<String>,
+        /// Filter sets/payloads by keyword.
+        #[arg(short, long)]
+        search: Option<String>,
+    },
+    /// List technique references (or show one by id).
+    Techniques {
+        /// Specific technique id to display.
+        id: Option<String>,
+    },
+    /// Search payloads and techniques by keyword.
+    Search {
+        /// Search keyword.
+        query: String,
+    },
+    /// Show the methodology checklist as markdown.
+    Checklist {
+        /// Render the checklist to this markdown file.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+    },
+    /// Generate an engagement plan for a target.
+    Plan {
+        /// Target base URL.
+        #[arg(short = 'u', long)]
+        target: String,
+        /// Known technologies (comma-separated).
+        #[arg(short, long)]
+        tech: Option<String>,
+        /// Whether you have valid credentials.
+        #[arg(long)]
+        authenticated: bool,
+        /// Max technique tier (overrides scope default).
+        #[arg(long)]
+        max_tier: Option<u8>,
+        /// Deepness profile (quick/standard/deep/paranoid).
+        #[arg(long)]
+        deepness: Option<String>,
+        /// Path to scope config for tier/deepness defaults.
+        #[arg(short, long, default_value = "config/scope.toml")]
+        scope: PathBuf,
+        /// Write the plan to this markdown file.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
     },
 }
 
@@ -1107,6 +1166,171 @@ async fn handle_hunt(target: &str, tier: grym_ai_agent::ModelTier) -> Result<()>
         }
     }
 
+    Ok(())
+}
+
+fn print_payload_set(set: &grym_web_scanner::playbook::PayloadSet) {
+    println!("\n=== {} ({}) ===", set.title, set.id);
+    println!("When to use: {}", set.when_to_use);
+    println!();
+    for p in &set.payloads {
+        println!("  [{d}] {v}", d = p.difficulty, v = p.value);
+        println!("      └─ {}", p.description);
+    }
+}
+
+fn print_technique(t: &grym_web_scanner::playbook::Technique) {
+    println!("\n=== {} ({}) ===", t.title, t.id);
+    println!("Domain: {}", t.domain);
+    println!("\nConcept: {}", t.concept);
+    println!("\nSteps:");
+    for (i, s) in t.steps.iter().enumerate() {
+        println!("  {}. {}", i + 1, s);
+    }
+    println!("\nSuccess looks like: {}", t.success_looks_like);
+    if !t.related_payload_sets.is_empty() {
+        println!(
+            "Related payload sets: {}",
+            t.related_payload_sets.join(", ")
+        );
+    }
+}
+
+async fn handle_playbook(command: PlaybookCommand) -> Result<()> {
+    use grym_web_scanner::{checklist, plan as plan_mod, playbook};
+
+    match command {
+        PlaybookCommand::Payloads { id, search } => {
+            if let Some(id) = id {
+                match playbook::payload_set(&id) {
+                    Some(set) => print_payload_set(&set),
+                    None => {
+                        eprintln!(
+                            "Unknown payload set '{id}'. Run 'grym playbook payloads' to list."
+                        );
+                        anyhow::bail!("unknown payload set '{id}'");
+                    }
+                }
+                return Ok(());
+            }
+            let sets = match search {
+                Some(q) => playbook::search(&q).payload_sets,
+                None => playbook::payload_sets(),
+            };
+            if sets.is_empty() {
+                println!("No matching payload sets.");
+                return Ok(());
+            }
+            println!("Payload library — {} sets\n", sets.len());
+            for set in &sets {
+                println!(
+                    "  {:<20} {:>2} payloads  {}",
+                    set.id,
+                    set.payloads.len(),
+                    set.title
+                );
+            }
+            println!("\nShow one with: grym playbook payloads <id>");
+        }
+        PlaybookCommand::Techniques { id } => {
+            if let Some(id) = id {
+                match playbook::technique(&id) {
+                    Some(t) => print_technique(&t),
+                    None => {
+                        eprintln!(
+                            "Unknown technique '{id}'. Run 'grym playbook techniques' to list."
+                        );
+                        anyhow::bail!("unknown technique '{id}'");
+                    }
+                }
+                return Ok(());
+            }
+            let techniques = playbook::techniques();
+            println!("Technique reference — {} entries\n", techniques.len());
+            let mut last_domain = String::new();
+            for t in &techniques {
+                if t.domain != last_domain {
+                    println!("\n[{t}]", t = t.domain);
+                    last_domain = t.domain.clone();
+                }
+                println!("  {:<26} {}", t.id, t.title);
+            }
+            println!("\nShow one with: grym playbook techniques <id>");
+        }
+        PlaybookCommand::Search { query } => {
+            let result = playbook::search(&query);
+            println!(
+                "Search '{}': {} payload sets, {} techniques",
+                result.query,
+                result.payload_sets.len(),
+                result.techniques.len()
+            );
+            for set in &result.payload_sets {
+                print_payload_set(set);
+            }
+            for t in &result.techniques {
+                print_technique(t);
+            }
+        }
+        PlaybookCommand::Checklist { out } => {
+            let cl = checklist::standard_web_checklist();
+            let md = checklist::to_markdown(&cl);
+            match out {
+                Some(path) => {
+                    std::fs::write(&path, &md)?;
+                    println!("✓ Checklist written to {}", path.display());
+                }
+                None => println!("{md}"),
+            }
+        }
+        PlaybookCommand::Plan {
+            target,
+            tech,
+            authenticated,
+            max_tier,
+            deepness,
+            scope: scope_path,
+            out,
+        } => {
+            // Pull tier/deepness defaults from scope; CLI flags override.
+            let (scope_tier, scope_deepness) = match grym_core::ScopeConfig::load(&scope_path) {
+                Ok(cfg) => (
+                    Some(u8::from(cfg.technique.max_tier)),
+                    Some(format!("{:?}", cfg.technique.deepness).to_lowercase()),
+                ),
+                Err(_) => (None, None),
+            };
+            let limits = plan_mod::PlanLimits {
+                max_tier: max_tier.or(scope_tier).unwrap_or(2).min(4),
+                deepness: deepness
+                    .or(scope_deepness)
+                    .unwrap_or_else(|| "standard".into()),
+            };
+            let profile = plan_mod::TargetProfile {
+                base_url: target,
+                technologies: tech
+                    .map(|t| {
+                        t.split(',')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                authenticated,
+                notes: Vec::new(),
+                engagement_id: String::new(),
+            };
+            let plan = plan_mod::generate(&profile, &limits);
+            let md = plan_mod::to_markdown(&plan);
+            match out {
+                Some(path) => {
+                    std::fs::write(&path, &md)?;
+                    println!("✓ Plan written to {}", path.display());
+                }
+                None => println!("{md}"),
+            }
+        }
+    }
     Ok(())
 }
 

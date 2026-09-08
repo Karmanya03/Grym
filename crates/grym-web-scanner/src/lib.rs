@@ -100,6 +100,7 @@ pub async fn scan_all_vulns(client: &ScopedClient, url: &Url) -> Vec<Finding> {
 }
 
 pub mod chain_builder;
+pub mod checklist;
 pub mod command_injection;
 pub mod cors;
 pub mod csrf;
@@ -115,6 +116,8 @@ pub mod nosqli;
 pub mod open_redirect;
 pub mod path_traversal;
 pub mod payload_gen;
+pub mod plan;
+pub mod playbook;
 pub mod sqli;
 pub mod ssrf;
 pub mod ssti;
