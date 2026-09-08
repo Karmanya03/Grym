@@ -1207,6 +1207,25 @@ pub async fn serve(config: ServeConfig) -> anyhow::Result<()> {
     }
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
+
+    // Friendly startup banner so operators immediately know how to connect.
+    let scheme = if config.tls_cert_path.is_some() {
+        "https"
+    } else {
+        "http"
+    };
+    let base = format!("{scheme}://{addr}");
+    let auth_note = if config.api_key.is_some() || config.jwt_secret.is_some() {
+        "Bearer token required"
+    } else {
+        "no auth (local only)"
+    };
+    println!("🛡️  GRYM API server listening on {base}");
+    println!("   Auth: {auth_note} | Rate limit: {}/min | Body limit: {} KB", config.rate_limit_per_minute, config.body_limit_bytes / 1024);
+    println!("   Extension: load browser-ext/ and it will auto-connect to {base}");
+    println!("   Endpoints: /health · /scan · /findings · /cve-db · /playbook/payloads · /playbook/plan · /state");
+    println!("   Press Ctrl+C to stop.");
+
     axum::serve(listener, app).await?;
 
     Ok(())

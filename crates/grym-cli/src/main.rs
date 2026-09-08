@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{generate as gen_completions, shells};
 use grym_core::{
     OperatorAttestation, ScopeConfig, ScopeGuard,
     audit::{AuditSink, MemoryAuditLog},
@@ -131,6 +132,9 @@ enum Command {
         /// Output findings as JSON.
         #[arg(long)]
         json: bool,
+        /// Save findings to this JSON file for `grym report`.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
         /// Use template file for signature-based checks.
         #[arg(short, long)]
         template: Option<PathBuf>,
@@ -193,6 +197,28 @@ enum Command {
     Playbook {
         #[command(subcommand)]
         command: PlaybookCommand,
+    },
+    /// Browse the offline CVE knowledge base (525+ entries, no network).
+    CveDb {
+        #[command(subcommand)]
+        command: CveDbCommand,
+    },
+    /// Generate offline PoCs, reverse shells, and web shells (authorized use).
+    Exploit {
+        #[command(subcommand)]
+        command: ExploitCommand,
+    },
+    /// Check your environment: scope validity, settings, Ollama, DB integrity.
+    Doctor {
+        /// Path to scope config to validate.
+        #[arg(short, long, default_value = "config/scope.toml")]
+        scope: PathBuf,
+    },
+    /// Generate shell completions for the given shell.
+    Completions {
+        /// Shell to generate completions for.
+        #[arg(value_enum)]
+        shell: shells::Shell,
     },
     /// Start the hardened API server for the browser extension.
     Serve {
@@ -282,6 +308,7 @@ async fn main() -> Result<()> {
             csrf,
             all,
             json,
+            out,
             template,
         } => {
             handle_scan(
@@ -303,6 +330,7 @@ async fn main() -> Result<()> {
                 tech_fingerprint || all,
                 csrf || all,
                 json,
+                out,
                 template,
             )
             .await?
@@ -323,6 +351,13 @@ async fn main() -> Result<()> {
             grym_tui::run().await?;
         }
         Command::Playbook { command } => handle_playbook(command).await?,
+        Command::CveDb { command } => handle_cve_db(command).await?,
+        Command::Exploit { command } => handle_exploit(command).await?,
+        Command::Doctor { scope } => handle_doctor(&scope).await?,
+        Command::Completions { shell } => {
+            let mut cmd = Cli::command();
+            gen_completions(shell, &mut cmd, "grym", &mut std::io::stdout());
+        }
         Command::Settings { command } => handle_settings(command).await?,
         Command::Ai { prompt, reasoning } => {
             let tier = if reasoning {
@@ -404,6 +439,53 @@ fn load_scope(path: &PathBuf) -> Result<(ScopeGuard, Arc<MemoryAuditLog>)> {
 
 async fn handle_scope(command: ScopeCommand) -> Result<()> {
     match command {
+        ScopeCommand::Init {
+            path,
+            engagement_id,
+            client,
+            allow,
+            days,
+        } => {
+            if path.exists() {
+                anyhow::bail!(
+                    "{} already exists — refusing to overwrite. Pick another path or delete it first.",
+                    path.display()
+                );
+            }
+            if let Some(parent) = path.parent()
+                && !parent.as_os_str().is_empty()
+            {
+                std::fs::create_dir_all(parent)?;
+            }
+            let start = chrono::Utc::now();
+            let end = start + chrono::Duration::days(i64::from(days));
+            let fmt = |t: chrono::DateTime<chrono::Utc>| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+            let eid = engagement_id.unwrap_or_else(|| format!("ENG-{}", start.format("%Y%m%d")));
+            let client_name = client.unwrap_or_else(|| "<CLIENT NAME>".into());
+            let allow_rules = if allow.is_empty() {
+                "<target.example.com>".to_string()
+            } else {
+                allow.join(", ")
+            };
+            let template = format!(
+                "# GRYM scope — edit values, then validate: grym scope validate {path}\n# Deny rules always win. Everything not allowed is denied.\nformat_version = 1\n\n[engagement]\nclient = \"{client}\"\nengagement_id = \"{eid}\"\nauthorized_start = \"{start}\"\nauthorized_end = \"{end}\"\nemergency_contact = \"<security@client.example>\"\n\n[targets]\nallow = [{allow}]\ndeny = [\"*/logout\", \"*/admin/delete-account\"]\n\n[limits]\nmax_requests_per_second_global = 20\nmax_requests_per_second_per_host = 3\nmax_response_bytes = 2097152\n\n[technique]\nmax_tier = 1\ndeepness = \"standard\"\n\n[authorization]\n# Must be true and paired with the typed session confirmation for Tier 1+ work.\nauthorization_attested = false\n\n[safety]\nmax_redirects = 5\nblock_rate_threshold_percent = 60\nserver_error_threshold = 5\n",
+                path = path.display(),
+                client = client_name,
+                eid = eid,
+                start = fmt(start),
+                end = fmt(end),
+                allow = allow_rules,
+            );
+            std::fs::write(&path, template)?;
+            println!("✓ Scope scaffold written to {}", path.display());
+            println!("  Engagement: {eid} | window: {days} day(s) from now");
+            println!("\nNext steps:");
+            println!("  1. Edit {} — set real targets, client, and window", path.display());
+            println!("  2. grym scope validate {}", path.display());
+            println!("  3. grym doctor --scope {}", path.display());
+            println!("  4. grym scan <url> --scope {} --all", path.display());
+            return Ok(());
+        }
         ScopeCommand::Validate { path } => {
             let scope = ScopeConfig::load(&path)?;
             println!("✓ Scope valid: {}", path.display());
@@ -449,6 +531,24 @@ enum ScopeCommand {
         #[arg(default_value = "config/scope.toml")]
         path: PathBuf,
     },
+    /// Create a new scope file from the bundled template (fails if it exists).
+    Init {
+        /// Path to write the new scope file.
+        #[arg(default_value = "config/scope.toml")]
+        path: PathBuf,
+        /// Engagement ID to pre-fill.
+        #[arg(long)]
+        engagement_id: Option<String>,
+        /// Client name to pre-fill.
+        #[arg(long)]
+        client: Option<String>,
+        /// Allowed target rule (repeat or comma-separate).
+        #[arg(long = "allow", value_delimiter = ',')]
+        allow: Vec<String>,
+        /// Days the authorization window stays open (from now).
+        #[arg(long, default_value_t = 14)]
+        days: u32,
+    },
 }
 
 /// Payload library and technique reference commands.
@@ -461,22 +561,34 @@ enum PlaybookCommand {
         /// Filter sets/payloads by keyword.
         #[arg(short, long)]
         search: Option<String>,
+        /// Emit machine-readable JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// List technique references (or show one by id).
     Techniques {
         /// Specific technique id to display.
         id: Option<String>,
+        /// Emit machine-readable JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Search payloads and techniques by keyword.
     Search {
         /// Search keyword.
         query: String,
+        /// Emit machine-readable JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Show the methodology checklist as markdown.
     Checklist {
         /// Render the checklist to this markdown file.
         #[arg(short, long)]
         out: Option<PathBuf>,
+        /// Emit machine-readable JSON instead of markdown.
+        #[arg(long)]
+        json: bool,
     },
     /// Generate an engagement plan for a target.
     Plan {
@@ -501,6 +613,78 @@ enum PlaybookCommand {
         /// Write the plan to this markdown file.
         #[arg(short, long)]
         out: Option<PathBuf>,
+        /// Emit machine-readable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+/// Offline CVE knowledge-base commands.
+#[derive(Debug, Subcommand)]
+enum CveDbCommand {
+    /// List all CVEs (filter by severity or component).
+    List {
+        /// Filter by severity (critical/high/medium/low).
+        #[arg(short, long)]
+        severity: Option<String>,
+        /// Filter by affected component substring.
+        #[arg(short, long)]
+        component: Option<String>,
+        /// Show only actively-exploited (KEV) CVEs.
+        #[arg(long)]
+        exploited: bool,
+    },
+    /// Show full details for one CVE.
+    Show { cve_id: String },
+    /// Search CVEs by keyword (id, name, description, tags).
+    Search { query: String },
+}
+
+/// Offline exploit/PoC generation commands.
+#[derive(Debug, Subcommand)]
+enum ExploitCommand {
+    /// Generate a PoC/exploit script from a CVE id in the local DB.
+    Cve {
+        /// CVE identifier, e.g. CVE-2021-44228.
+        cve_id: String,
+        /// Target URL to embed in the PoC.
+        #[arg(short = 'u', long)]
+        target: Option<String>,
+        /// Output language/format (python, curl, bash, nuclei, go, rust, powershell, metasploit).
+        #[arg(short, long, default_value = "python")]
+        lang: String,
+        /// Write the PoC to this file instead of stdout.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+    },
+    /// Generate a reverse-shell one-liner.
+    ReverseShell {
+        /// Callback host/IP.
+        ip: String,
+        /// Callback port.
+        port: u16,
+        /// Language (python, bash, powershell, nodejs, perl, ruby, lua, java, php, csharp).
+        #[arg(short, long, default_value = "bash")]
+        lang: String,
+        /// Obfuscate the payload.
+        #[arg(long)]
+        obfuscate: bool,
+    },
+    /// Generate a minimal web shell (authorized engagements only).
+    WebShell {
+        /// Language (php, jsp, asp, aspx).
+        lang: String,
+        /// Write the shell to this file instead of stdout.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+    },
+    /// Generate mutated variants of a base payload.
+    Variants {
+        /// Base payload to mutate.
+        payload: String,
+        /// How many variants to produce.
+        #[arg(short, long, default_value_t = 8)]
+        count: usize,
     },
 }
 
@@ -797,6 +981,7 @@ async fn handle_scan(
     tech_fingerprint: bool,
     csrf: bool,
     json: bool,
+    out: Option<PathBuf>,
     template: Option<PathBuf>,
 ) -> Result<()> {
     println!("🛡️  GRYM Web Vulnerability Scanner — target: {}", url);
@@ -1042,6 +1227,25 @@ async fn handle_scan(
         println!("\n{}", serde_json::to_string_pretty(&all_findings)?);
     }
 
+    // Persist findings for later processing.
+    let findings_path = out.clone().unwrap_or_else(|| PathBuf::from("findings.json"));
+    std::fs::write(
+        &findings_path,
+        serde_json::to_string_pretty(&all_findings)?,
+    )?;
+    println!("\n✓ Findings saved to {}", findings_path.display());
+
+    // Next-step hints so the operator always knows where to go from here.
+    println!("\nNext steps:");
+    if high > 0 {
+        println!("  • grym report {} -f markdown -o report.md", findings_path.display());
+        println!("  • grym playbook techniques        # exploit walkthroughs for what you found");
+    } else {
+        println!("  • Re-run with --all for broader module coverage");
+        println!("  • grym recon-active <url> --all   # map more attack surface first");
+    }
+    println!("  • grym playbook plan -u {url}   # build a full engagement plan");
+
     Ok(())
 }
 
@@ -1196,14 +1400,297 @@ fn print_technique(t: &grym_web_scanner::playbook::Technique) {
     }
 }
 
+/// Parse a language string into an ExploitFormat, mirroring the serve API mapping.
+fn parse_exploit_format(lang: &str) -> grym_web_scanner::exploit_gen::ExploitFormat {
+    use grym_web_scanner::exploit_gen::ExploitFormat as F;
+    match lang.to_lowercase().as_str() {
+        "python" | "py" => F::Python,
+        "python-requests" | "pyreq" => F::PythonRequests,
+        "go" => F::Go,
+        "rust" | "rs" => F::Rust,
+        "curl" => F::Curl,
+        "httpie" => F::HTTPie,
+        "nuclei" | "yaml" => F::NucleiYaml,
+        "metasploit" | "msf" | "ruby-msf" => F::MetasploitRuby,
+        "bash" | "sh" => F::Bash,
+        "powershell" | "ps1" => F::PowerShell,
+        "javascript" | "js" => F::JavaScript,
+        "nodejs" | "node" => F::NodeJs,
+        "java" => F::Java,
+        "php" => F::PHP,
+        "burp" | "burp-intruder" => F::BurpIntruder,
+        "ruby" | "rb" => F::Ruby,
+        "perl" | "pl" => F::Perl,
+        "lua" => F::Lua,
+        "csharp" | "cs" | "c#" => F::CSharp,
+        _ => F::Python,
+    }
+}
+
+async fn handle_cve_db(command: CveDbCommand) -> Result<()> {
+    let db = grym_web_scanner::cve_db::get_cve_database();
+
+    match command {
+        CveDbCommand::List {
+            severity,
+            component,
+            exploited,
+        } => {
+            let sev_filter = severity.map(|s| s.to_lowercase());
+            let comp_filter = component.map(|c| c.to_lowercase());
+            let entries: Vec<_> = db
+                .into_iter()
+                .filter(|e| {
+                    sev_filter
+                        .as_ref()
+                        .is_none_or(|s| e.severity.to_lowercase() == *s)
+                        && comp_filter
+                            .as_ref()
+                            .is_none_or(|c| e.affected_component.to_lowercase().contains(c))
+                        && (!exploited || e.known_exploited)
+                })
+                .collect();
+            if entries.is_empty() {
+                println!("No CVEs match the given filters.");
+                return Ok(());
+            }
+            println!("CVE knowledge base — {} entries\n", entries.len());
+            for e in &entries {
+                let kev = if e.known_exploited { " [KEV]" } else { "" };
+                println!(
+                    "  {:<16} {:<8} {:>4}  {}{}",
+                    e.cve_id,
+                    e.severity,
+                    format!("{:.1}", e.cvss_score),
+                    e.name,
+                    kev
+                );
+            }
+            println!("\nDetails: grym cve-db show <id> | Search: grym cve-db search <kw>");
+        }
+        CveDbCommand::Show { cve_id } => {
+            let upper = cve_id.to_uppercase();
+            match grym_web_scanner::cve_db::lookup_cve(&upper) {
+                Some(e) => {
+                    println!("{} — {}{}", e.cve_id, e.name, if e.known_exploited { " [KNOWN EXPLOITED]" } else { "" });
+                    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+                    println!("  Component:  {} ({})", e.affected_component, e.affected_versions.join(", "));
+                    println!("  Severity:   {} (CVSS {:.1} — {})", e.severity, e.cvss_score, e.cvss_vector);
+                    println!("  CWE:        {} | Attack: {} | OWASP: {}", e.cwe_id, e.attack_type, e.owasp_category);
+                    println!("\n  {}", e.description);
+                    if !e.payload_examples.is_empty() {
+                        println!("\n  Payload examples:");
+                        for p in &e.payload_examples {
+                            println!("    • {p}");
+                        }
+                    }
+                    if !e.detection_signatures.is_empty() {
+                        println!("\n  Detection signatures:");
+                        for s in &e.detection_signatures {
+                            println!("    • {s}");
+                        }
+                    }
+                    if !e.metasploit_modules.is_empty() {
+                        println!("\n  Metasploit modules:");
+                        for m in &e.metasploit_modules {
+                            println!("    • {m}");
+                        }
+                    }
+                    if !e.nuclei_templates.is_empty() {
+                        println!("\n  Nuclei templates:");
+                        for n in &e.nuclei_templates {
+                            println!("    • {n}");
+                        }
+                    }
+                    if !e.exploit_urls.is_empty() {
+                        println!("\n  References:");
+                        for u in &e.exploit_urls {
+                            println!("    • {u}");
+                        }
+                    }
+                    println!("\n  Remediation: {}", e.remediation);
+                    if !e.patch_urls.is_empty() {
+                        for u in &e.patch_urls {
+                            println!("    • {u}");
+                        }
+                    }
+                    println!("\nGenerate a PoC: grym exploit cve {} -u <target>", e.cve_id);
+                }
+                None => {
+                    eprintln!("'{cve_id}' not found. Try 'grym cve-db search <keyword>'.");
+                    anyhow::bail!("unknown CVE '{cve_id}'");
+                }
+            }
+        }
+        CveDbCommand::Search { query } => {
+            let q = query.to_lowercase();
+            let matches: Vec<_> = db
+                .into_iter()
+                .filter(|e| {
+                    e.cve_id.to_lowercase().contains(&q)
+                        || e.name.to_lowercase().contains(&q)
+                        || e.description.to_lowercase().contains(&q)
+                        || e.affected_component.to_lowercase().contains(&q)
+                        || e.tags.iter().any(|t| t.to_lowercase().contains(&q))
+                })
+                .collect();
+            if matches.is_empty() {
+                println!("No CVEs match '{query}'.");
+                return Ok(());
+            }
+            println!("Search '{}': {} matches\n", query, matches.len());
+            for e in &matches {
+                let kev = if e.known_exploited { " [KEV]" } else { "" };
+                println!(
+                    "  {:<16} {:<8} {:>4}  {}{}",
+                    e.cve_id,
+                    e.severity,
+                    format!("{:.1}", e.cvss_score),
+                    e.name,
+                    kev
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn handle_exploit(command: ExploitCommand) -> Result<()> {
+    use grym_web_scanner::exploit_gen::{self, ExploitGenOptions, generate_payload_variants};
+
+    match command {
+        ExploitCommand::Cve {
+            cve_id,
+            target,
+            lang,
+            out,
+        } => {
+            let upper = cve_id.to_uppercase();
+            let opts = ExploitGenOptions::new(parse_exploit_format(&lang))
+                .with_target(target.as_deref().unwrap_or("http://<TARGET>"));
+            let exploit = exploit_gen::generate_cve_exploit_command(&upper, "", &opts)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "No PoC template for '{upper}'. Try 'grym cve-db search' to find related CVEs."
+                    )
+                })?;
+            let body = format!(
+                "# {} — {}\n# Risk: {} | Auth required: {}\n# Usage: {}\n# Deps: {}\n\n{}\n",
+                exploit.name,
+                exploit.description,
+                exploit.risk_level,
+                exploit.requires_auth,
+                exploit.usage,
+                exploit.dependencies.join(", "),
+                exploit.code
+            );
+            match out {
+                Some(path) => {
+                    std::fs::write(&path, &body)?;
+                    println!("✓ PoC written to {} ({} format)", path.display(), lang);
+                }
+                None => println!("{body}"),
+            }
+        }
+        ExploitCommand::ReverseShell {
+            ip,
+            port,
+            lang,
+            obfuscate,
+        } => {
+            let format = parse_exploit_format(&lang);
+            let shell = exploit_gen::generate_reverse_shell(&ip, port, format, obfuscate);
+            println!("# Reverse shell — {lang}{}", if obfuscate { " (obfuscated)" } else { "" });
+            println!("# Authorized engagements only. Start your listener first.\n");
+            println!("{shell}");
+        }
+        ExploitCommand::WebShell { lang, out } => {
+            let shell = exploit_gen::generate_web_shell(&lang);
+            match out {
+                Some(path) => {
+                    std::fs::write(&path, &shell)?;
+                    println!("✓ Web shell written to {}", path.display());
+                }
+                None => println!("{shell}"),
+            }
+        }
+        ExploitCommand::Variants { payload, count } => {
+            let variants = generate_payload_variants(&payload, count);
+            println!("{} variants of base payload:\n", variants.len());
+            for (i, v) in variants.iter().enumerate() {
+                println!("  {:>2}. {v}", i + 1);
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn handle_doctor(scope_path: &PathBuf) -> Result<()> {
+    println!("🩺 GRYM Doctor\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+    let mut ok = true;
+
+    // 1. Scope file.
+    match grym_core::ScopeConfig::load(scope_path) {
+        Ok(cfg) => {
+            println!("✓ Scope: {} (engagement {})", scope_path.display(), cfg.engagement.engagement_id);
+            if !cfg.targets.allow.is_empty() {
+                println!("    allow: {} rule(s)", cfg.targets.allow.len());
+            }
+        }
+        Err(e) => {
+            ok = false;
+            println!("✗ Scope: {} — {e}", scope_path.display());
+            println!("    Fix: copy config/scope.example.toml and edit, or run 'grym scope init'.");
+        }
+    }
+
+    // 2. Persisted settings readable.
+    let settings = grym_core::settings::GrymSettings::load();
+    println!("✓ Settings: loaded ({})", if settings.scope.engagement_id.is_empty() { "defaults" } else { "configured" });
+
+    // 3. Ollama reachable.
+    let mut s2 = settings.clone();
+    let ollama_ok = s2.auto_detect_ollama().await;
+    if ollama_ok {
+        println!("✓ Ollama: reachable at {}", s2.ollama.base_url);
+    } else {
+        println!("⚠ Ollama: not reachable at {} (AI features unavailable; everything else works)", s2.ollama.base_url);
+    }
+
+    // 4. Playbook integrity.
+    let sets = grym_web_scanner::playbook::payload_sets().len();
+    let techniques = grym_web_scanner::playbook::techniques().len();
+    let cves = grym_web_scanner::cve_db::get_cve_database().len();
+    println!("✓ Knowledge base: {sets} payload sets, {techniques} techniques, {cves} CVE entries");
+
+    println!(
+        "\n{}",
+        if ok {
+            "All critical checks passed.".to_string()
+        } else {
+            "Some checks failed — see above for fixes.".to_string()
+        }
+    );
+    if !ok {
+        anyhow::bail!("doctor found problems");
+    }
+    Ok(())
+}
+
 async fn handle_playbook(command: PlaybookCommand) -> Result<()> {
     use grym_web_scanner::{checklist, plan as plan_mod, playbook};
 
     match command {
-        PlaybookCommand::Payloads { id, search } => {
+        PlaybookCommand::Payloads { id, search, json } => {
             if let Some(id) = id {
                 match playbook::payload_set(&id) {
-                    Some(set) => print_payload_set(&set),
+                    Some(set) => {
+                        if json {
+                            println!("{}", serde_json::to_string_pretty(&set)?);
+                        } else {
+                            print_payload_set(&set);
+                        }
+                    }
                     None => {
                         eprintln!(
                             "Unknown payload set '{id}'. Run 'grym playbook payloads' to list."
@@ -1217,6 +1704,10 @@ async fn handle_playbook(command: PlaybookCommand) -> Result<()> {
                 Some(q) => playbook::search(&q).payload_sets,
                 None => playbook::payload_sets(),
             };
+            if json {
+                println!("{}", serde_json::to_string_pretty(&sets)?);
+                return Ok(());
+            }
             if sets.is_empty() {
                 println!("No matching payload sets.");
                 return Ok(());
@@ -1232,10 +1723,16 @@ async fn handle_playbook(command: PlaybookCommand) -> Result<()> {
             }
             println!("\nShow one with: grym playbook payloads <id>");
         }
-        PlaybookCommand::Techniques { id } => {
+        PlaybookCommand::Techniques { id, json } => {
             if let Some(id) = id {
                 match playbook::technique(&id) {
-                    Some(t) => print_technique(&t),
+                    Some(t) => {
+                        if json {
+                            println!("{}", serde_json::to_string_pretty(&t)?);
+                        } else {
+                            print_technique(&t);
+                        }
+                    }
                     None => {
                         eprintln!(
                             "Unknown technique '{id}'. Run 'grym playbook techniques' to list."
@@ -1246,6 +1743,10 @@ async fn handle_playbook(command: PlaybookCommand) -> Result<()> {
                 return Ok(());
             }
             let techniques = playbook::techniques();
+            if json {
+                println!("{}", serde_json::to_string_pretty(&techniques)?);
+                return Ok(());
+            }
             println!("Technique reference — {} entries\n", techniques.len());
             let mut last_domain = String::new();
             for t in &techniques {
@@ -1257,8 +1758,12 @@ async fn handle_playbook(command: PlaybookCommand) -> Result<()> {
             }
             println!("\nShow one with: grym playbook techniques <id>");
         }
-        PlaybookCommand::Search { query } => {
+        PlaybookCommand::Search { query, json } => {
             let result = playbook::search(&query);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+                return Ok(());
+            }
             println!(
                 "Search '{}': {} payload sets, {} techniques",
                 result.query,
@@ -1272,8 +1777,12 @@ async fn handle_playbook(command: PlaybookCommand) -> Result<()> {
                 print_technique(t);
             }
         }
-        PlaybookCommand::Checklist { out } => {
+        PlaybookCommand::Checklist { out, json } => {
             let cl = checklist::standard_web_checklist();
+            if json {
+                println!("{}", serde_json::to_string_pretty(&cl)?);
+                return Ok(());
+            }
             let md = checklist::to_markdown(&cl);
             match out {
                 Some(path) => {
@@ -1291,6 +1800,7 @@ async fn handle_playbook(command: PlaybookCommand) -> Result<()> {
             deepness,
             scope: scope_path,
             out,
+            json,
         } => {
             // Pull tier/deepness defaults from scope; CLI flags override.
             let (scope_tier, scope_deepness) = match grym_core::ScopeConfig::load(&scope_path) {
@@ -1321,6 +1831,10 @@ async fn handle_playbook(command: PlaybookCommand) -> Result<()> {
                 engagement_id: String::new(),
             };
             let plan = plan_mod::generate(&profile, &limits);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&plan)?);
+                return Ok(());
+            }
             let md = plan_mod::to_markdown(&plan);
             match out {
                 Some(path) => {

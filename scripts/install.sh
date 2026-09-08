@@ -1,6 +1,6 @@
 #!/bin/sh
 # One-line installer for the GRYM CLI and TUI.
-# Usage: curl -fsSL https://raw.githubusercontent.com/owner/grym/main/scripts/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/Karmanya03/Grym/master/scripts/install.sh | sh
 #        curl ... | sh -s -- --install-dir /usr/local/bin --bin grym
 
 set -eu
@@ -8,7 +8,7 @@ set -eu
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
-REPO="grym"
+REPO="Grym"
 OWNER="Karmanya03"
 INSTALL_DIR="${INSTALL_DIR:-}"
 VERSION="${VERSION:-latest}"

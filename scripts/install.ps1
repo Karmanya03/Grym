@@ -7,10 +7,10 @@
     installs it into a user directory, and adds that directory to the user PATH.
 
     Run with:
-        irm https://raw.githubusercontent.com/owner/grym/main/scripts/install.ps1 | iex
+        irm https://raw.githubusercontent.com/Karmanya03/Grym/master/scripts/install.ps1 | iex
 
     Or with parameters:
-        & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Karmanya03/grym/main/scripts/install.ps1))) -Version v0.1.0 -Bin grym-tui
+        & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Karmanya03/Grym/master/scripts/install.ps1))) -Version v0.1.0 -Bin grym-tui
 
     Or via environment variables:
         $env:GRYM_VERSION = "v0.1.0"; $env:GRYM_BIN = "grym-tui"; irm .../install.ps1 | iex
@@ -37,7 +37,7 @@ if ([string]::IsNullOrWhiteSpace($InstallDir)) { $InstallDir = $env:GRYM_INSTALL
 
 $ErrorActionPreference = "Stop"
 
-$Repo = "grym"
+$Repo = "Grym"
 
 function Get-LatestRelease {
     param([string]$Owner, [string]$Repo)
