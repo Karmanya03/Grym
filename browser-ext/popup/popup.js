@@ -117,8 +117,9 @@ async function runQuickScan() {
     if (!tab?.id) throw new Error('No active tab');
 
     const result = await chrome.tabs.sendMessage(tab.id, { type: 'full' });
-    if (result?.findings) {
+    if (result?.findings?.length) {
       state.findings.unshift(...result.findings);
+      chrome.runtime.sendMessage({ type: 'addFindings', findings: result.findings }).catch(() => {});
       renderFindings();
       toast(`${result.findings.length} findings found`);
     } else {
@@ -166,6 +167,9 @@ chrome.runtime.onMessage.addListener((msg) => {
       state.findings.unshift(...msg.data.findings);
       renderFindings();
     }
+  } else if (msg.type === 'scanComplete') {
+    state.findings.unshift(...(msg.findings || []));
+    renderFindings();
   }
 });
 

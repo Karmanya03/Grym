@@ -85,7 +85,25 @@ async function detectServer() {
 }
 
 function broadcast(msg) {
-  chrome.runtime.sendMessage(msg).catch(() => {});
+  try {
+    chrome.runtime.sendMessage(msg).catch(() => {});
+  } catch {}
+}
+
+function addFindings(newFindings) {
+  const fresh = (Array.isArray(newFindings) ? newFindings : [])
+    .filter((f) => f && typeof f === 'object' && (f.title || f.type));
+  if (fresh.length === 0) return;
+  const seen = new Set(grymState.findings.map((f) => `${f.target}|${f.title}|${f.type}`));
+  for (const f of fresh) {
+    const key = `${f.target || ''}|${f.title || ''}|${f.type || ''}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      grymState.findings.unshift({ ...f, timestamp: f.timestamp || new Date().toISOString() });
+    }
+  }
+  if (grymState.findings.length > 500) grymState.findings.length = 500;
+  saveState();
 }
 
 async function handleScanRequest(request, sender, sendResponse) {
@@ -105,7 +123,7 @@ async function handleScanRequest(request, sender, sendResponse) {
       });
       if (resp.ok) {
         const result = await resp.json();
-        grymState.findings.push(...(result.findings || []));
+        addFindings(result.findings || []);
         grymState.activeScan = { ...grymState.activeScan, status: 'completed', progress: 100, completedAt: Date.now() };
         grymState.scanHistory.push(grymState.activeScan);
         saveState();
@@ -115,7 +133,7 @@ async function handleScanRequest(request, sender, sendResponse) {
     }
 
     const findings = await runLocalScan(target, scanType, options);
-    grymState.findings.push(...findings);
+    addFindings(findings);
     grymState.activeScan = { ...grymState.activeScan, status: 'completed', progress: 100, completedAt: Date.now() };
     grymState.scanHistory.push(grymState.activeScan);
     saveState();
@@ -168,6 +186,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       grymState.findings = [];
       saveState();
       sendResponse({ ok: true });
+      break;
+    case 'pageData':
+      grymState.lastPageData = message.data || null;
+      saveState();
+      broadcast({ type: 'stateUpdate', lastPageData: grymState.lastPageData });
+      break;
+    case 'getPageData':
+      sendResponse(grymState.lastPageData || null);
+      break;
+    case 'quickAnalysis':
+      if (message.data?.findings) {
+        addFindings(message.data.findings);
+        broadcast({ type: 'quickAnalysis', data: message.data });
+      }
+      sendResponse({ ok: true });
+      break;
+    case 'addFindings':
+      addFindings(message.findings || []);
+      broadcast({ type: 'stateUpdate', findings: grymState.findings });
+      sendResponse({ ok: true, total: grymState.findings.length });
       break;
     case 'openDashboard':
       chrome.tabs.create({ url: chrome.runtime.getURL('dashboard/dashboard.html') });

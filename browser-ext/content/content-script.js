@@ -29,12 +29,36 @@
     { name: 'Express', regex: /express|x-powered-by: express/i },
     { name: 'Socket.IO', regex: /socket\.io|io\.connect|io\(/i },
     { name: 'Alpine.js', regex: /alpine\.js|x-data|x-bind|x-on|x-show|x-text|x-init|x-ref/i },
-    { name: 'HTMX', regex: /htmx\.js|hx-get|hx-post|hx-put|hx-delete|hx-trigger|hx-target|hx-swap/i }
+    { name: 'HTMX', regex: /htmx\.js|hx-get|hx-post|hx-put|hx-delete|hx-trigger|hx-target|hx-swap/i },
+    { name: 'Remix', regex: /remix|_remix|@remix-run/i },
+    { name: 'Astro', regex: /astro(?:\.island)?\.|__ASTRO|_astro\//i },
+    { name: 'Gatsby', regex: /gatsby|___gatsby|gatsby-\w+/i },
+    { name: 'Vite', regex: /vite|__vite|\\\/@vite/i },
+    { name: 'Webpack', regex: /webpack|__webpack_require__|webpackJsonp/i },
+    { name: 'Shopify', regex: /shopify|cdn\.shopify\.com|Shopify\.theme/i },
+    { name: 'Magento', regex: /magento|mage-|mage\.cookies|MAGE_VERSION/i },
+    { name: 'ColdFusion', regex: /_cf_|cfml|coldfusion|CFIDE/i },
+    { name: 'Salesforce', regex: /salesforce|salesforce\.com|lightning|aura/i },
+    { name: 'SharePoint', regex: /sharepoint|_layouts|spfx|Microsoft.SharePoint/i },
+    { name: 'Axios', regex: /axios(?:\.min)?\.js|axios\.defaults|from 'axios'/i },
+    { name: 'Lodash', regex: /lodash(?:\.min)?\.js|_.\w{2,}.*_\.VERSION|lodash\.js/i },
+    { name: 'Moment.js', regex: /moment(?:\.min)?\.js|moment\.fn/i },
+    { name: 'GSAP', regex: /gsap(?:\.min)?\.js|gsap\.to\(|TweenMax|TimelineMax/i },
+    { name: 'Chart.js', regex: /chart(?:\.min)?\.js|Chart\.defaults|new Chart/i },
+    { name: 'ApexCharts', regex: /apexcharts|ApexCharts/i },
+    { name: 'Leaflet', regex: /leaflet(?:\.min)?\.js|L\.map\(/i },
+    { name: 'Google Tag Manager', regex: /googletagmanager\.com\/gtm\.js|dataLayer/i },
+    { name: 'Meta Pixel', regex: /connect\.facebook\.net\/en_US\/fbevents|fbq\(/i },
+    { name: 'Hotjar', regex: /static\.hotjar\.com|hj\(|_hjSettings/i },
+    { name: 'Segment', regex: /cdn\.segment\.com|analytics\.load\(/i },
+    { name: 'Stripe', regex: /js\.stripe\.com|Stripe\.js|stripe\.com\/v3/i },
+    { name: 'reCAPTCHA', regex: /recaptcha\/api\.js|grecaptcha|recaptcha\.net/i },
+    { name: 'hCaptcha', regex: /hcaptcha\.com|hcaptcha\.js/i }
   ];
 
   const SECRET_PATTERNS = [
     { type: 'AWS Key', regex: /(?:A3T[A-Z0-9]|AKIA|ASIA)[A-Z0-9]{16}/g },
-    { type: 'AWS Secret', regex: /(?i)aws[_\-\.]?(?:secret|access)[_\-\.]?key['"]?\s*[:=]\s*['"][A-Za-z0-9\/+=]{40}['"]/g },
+    { type: 'AWS Secret', regex: /aws[_\-\.]?(?:secret|access)[_\-\.]?key['"]?\s*[:=]\s*['"][A-Za-z0-9\/+=]{40}['"]/gi },
     { type: 'GitHub Token', regex: /gh[pousr]_[A-Za-z0-9]{36,252}|github[_\-\.]?token['"]?\s*[:=]\s*['"][A-Za-z0-9]+['"]/g },
     { type: 'Google API Key', regex: /AIza[0-9A-Za-z\-_]{35}/g },
     { type: 'JWT Token', regex: /eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/g },
@@ -226,6 +250,21 @@
     };
   }
 
+  function findUnsafeLinks() {
+    const unsafe = [];
+    document.querySelectorAll('a[target="_blank"]').forEach(a => {
+      const rel = (a.getAttribute('rel') || '').toLowerCase();
+      const href = a.getAttribute('href');
+      if (!rel.split(/\s+/).includes('noopener') && href && !href.startsWith('#')) {
+        unsafe.push({
+          href: href.length > 120 ? href.slice(0, 120) + '…' : href,
+          missingRel: rel.trim() === '' ? 'no rel attribute' : `rel="${rel}"`
+        });
+      }
+    });
+    return unsafe.slice(0, 20);
+  }
+
   window.__grymScan = function(scanType, options) {
     const findings = [];
     const pageAnalysis = fullAnalyze();
@@ -297,6 +336,14 @@
             findings.push({ type: 'missing_csrf', severity: 'medium', title: `Form lacks CSRF`, detail: f.action });
           }
         });
+        pageAnalysis.unsafeLinks.forEach(l => {
+          findings.push({
+            type: 'unsafe_link',
+            severity: 'low',
+            title: 'target=_blank without rel=noopener',
+            detail: `${l.href} (${l.missingRel})`
+          });
+        });
         findings.push({
           type: 'summary',
           severity: 'info',
@@ -330,6 +377,7 @@
       forms: analyzeForms(),
       endpoints: analyzeEndpoints(),
       security: checkSecurityHeaders(),
+      unsafeLinks: findUnsafeLinks(),
       cookies: document.cookie.split(';').map(c => c.trim()).filter(Boolean),
       scripts: document.scripts.length,
       links: document.querySelectorAll('a').length,
@@ -351,9 +399,28 @@
   window.addEventListener('hashchange', () => { analysisCache = null; });
 
   setTimeout(() => {
-    chrome.runtime.sendMessage({
-      type: 'pageData',
-      data: fullAnalyze()
-    }).catch(() => {});
+    try {
+      chrome.runtime.sendMessage({
+        type: 'pageData',
+        data: fullAnalyze()
+      }).catch(() => {});
+    } catch {}
   }, 1500);
+
+  try {
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (typeof message !== 'object' || message === null) return;
+      const scanType = message.type || message.scanType;
+      if (typeof scanType === 'string' && scanType.length > 0 && scanType.length < 40) {
+        const result = window.__grymScan(scanType, message.options || {});
+        sendResponse(result);
+        return true;
+      }
+      if (message.type === 'quickAnalyze') {
+        const result = window.__grymQuickAnalyze();
+        sendResponse(result);
+        return true;
+      }
+    });
+  } catch {}
 })();

@@ -44,6 +44,12 @@ pub enum EncodingLayer {
     InlineComment,
     NullByteTruncation,
     WhitespacePadding,
+    FullwidthEncode,
+    UnicodeSlash,
+    CharCodeAssembly,
+    NestedMix,
+    Utf8UrlEncode,
+    KeywordCommentSplit,
 }
 
 /// Database engine for SQLi payload adaptation.
@@ -283,6 +289,67 @@ pub fn apply_encoding(raw: &str, layer: &EncodingLayer) -> String {
                 })
                 .collect()
         }
+        EncodingLayer::FullwidthEncode => raw
+            .chars()
+            .map(|c| {
+                if ('!'..='~').contains(&c) {
+                    char::from_u32(c as u32 + 0xFEE0).unwrap_or(c)
+                } else {
+                    c
+                }
+            })
+            .collect(),
+        EncodingLayer::UnicodeSlash => raw
+            .chars()
+            .map(|c| match c {
+                '/' => '\u{2215}',
+                '\\' => '\u{FF3C}',
+                '.' => '\u{FF0E}',
+                other => other,
+            })
+            .collect(),
+        EncodingLayer::CharCodeAssembly => {
+            let codes: Vec<String> = raw.chars().map(|c| (c as u32).to_string()).collect();
+            format!("String.fromCharCode({})", codes.join(","))
+        }
+        EncodingLayer::NestedMix => {
+            let mixed: String = raw
+                .chars()
+                .enumerate()
+                .map(|(i, c)| {
+                    if i % 2 == 0 {
+                        c.to_uppercase().collect::<String>()
+                    } else {
+                        c.to_lowercase().collect::<String>()
+                    }
+                })
+                .collect();
+            urlencoding::encode(&mixed).to_string()
+        }
+        EncodingLayer::Utf8UrlEncode => {
+            let mut out = String::new();
+            for b in raw.as_bytes() {
+                out.push_str(&format!("%{:02X}", b));
+            }
+            out
+        }
+        EncodingLayer::KeywordCommentSplit => {
+            let mut out = String::new();
+            let mut prev_alpha = false;
+            for c in raw.chars() {
+                if c.is_ascii_alphanumeric() {
+                    if prev_alpha {
+                        out.push_str("/**/");
+                    }
+                    out.push(c);
+                    prev_alpha = true;
+                } else {
+                    out.push(c);
+                    prev_alpha = false;
+                }
+            }
+            out
+        }
     }
 }
 
@@ -301,6 +368,12 @@ pub fn generate_all_encodings(raw: &str) -> Vec<GeneratedPayload> {
         EncodingLayer::InlineComment,
         EncodingLayer::NullByteTruncation,
         EncodingLayer::WhitespacePadding,
+        EncodingLayer::FullwidthEncode,
+        EncodingLayer::UnicodeSlash,
+        EncodingLayer::CharCodeAssembly,
+        EncodingLayer::NestedMix,
+        EncodingLayer::Utf8UrlEncode,
+        EncodingLayer::KeywordCommentSplit,
     ];
 
     layers
@@ -383,6 +456,11 @@ pub fn generate_waf_bypass_variants(payload: &str) -> Vec<GeneratedPayload> {
         EncodingLayer::UrlDoubleEncode,
         EncodingLayer::HtmlEntity,
         EncodingLayer::HexEncode,
+        EncodingLayer::FullwidthEncode,
+        EncodingLayer::UnicodeSlash,
+        EncodingLayer::NestedMix,
+        EncodingLayer::Utf8UrlEncode,
+        EncodingLayer::KeywordCommentSplit,
     ] {
         variants.push(GeneratedPayload {
             raw: apply_encoding(payload, layer),
@@ -427,6 +505,22 @@ mod tests {
     fn test_url_encoding_layer() {
         let encoded = apply_encoding("alert(1)", &EncodingLayer::UrlEncode);
         assert!(encoded.contains("%28") && encoded.contains("%29"));
+    }
+
+    #[test]
+    fn test_advanced_encoding_layers() {
+        let fw = apply_encoding("alert", &EncodingLayer::FullwidthEncode);
+        assert!(fw.contains('\u{FF41}'));
+        let slash = apply_encoding("../etc", &EncodingLayer::UnicodeSlash);
+        assert!(slash.contains('\u{2215}'));
+        let cc = apply_encoding("id", &EncodingLayer::CharCodeAssembly);
+        assert!(cc.contains("String.fromCharCode(105,100)"));
+        let nested = apply_encoding("alert(1)", &EncodingLayer::NestedMix);
+        assert!(nested.contains('%'));
+        let utf8 = apply_encoding("é", &EncodingLayer::Utf8UrlEncode);
+        assert!(utf8.contains("%C3%A9"));
+        let split = apply_encoding("select", &EncodingLayer::KeywordCommentSplit);
+        assert!(split.contains("s/**/e/**/l/**/e/**/c/**/t"));
     }
 
     #[test]
